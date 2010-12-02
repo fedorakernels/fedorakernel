@@ -240,7 +240,7 @@ static void irq_handler(void *blah)
 	unsigned int level, newlevel;
 	unsigned int timeout;
 
-	if (!module_refcount(THIS_MODULE))
+	if (!is_open)
 		return;
 
 	if (!is_claimed)
@@ -515,7 +515,7 @@ static long lirc_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 static int lirc_open(struct inode *node, struct file *filep)
 {
-	if (module_refcount(THIS_MODULE) || !lirc_claim())
+	if (is_open || !lirc_claim())
 		return -EBUSY;
 
 	parport_enable_irq(pport);
@@ -539,7 +539,7 @@ static int lirc_close(struct inode *node, struct file *filep)
 	return 0;
 }
 
-static struct file_operations lirc_fops = {
+static const struct file_operations lirc_fops = {
 	.owner		= THIS_MODULE,
 	.llseek		= lirc_lseek,
 	.read		= lirc_read,
