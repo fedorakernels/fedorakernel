@@ -14,7 +14,8 @@ Authors
 James McKenzie (original driver)
 Alex Karpenko (05ac:8242 support)
 Greg Kroah-Hartman (cleanups and original submission)
-Bastien Nocera (further cleanups and suspend support)
+Bastien Nocera (further cleanups, brushed metal "enter"
+button support and suspend support)
 
 Supported hardware
 ------------------
@@ -22,11 +23,11 @@ Supported hardware
 - All Apple laptops and desktops from 2005 onwards, except:
   - the unibody Macbook (2009)
   - Mac Pro (all versions)
-- Apple TV (all revisions)
+- Apple TV (all revisions prior to September 2010)
 
-The remote will only support the 6 buttons of the original remotes
-as sold by Apple. See the next section if you want to use other remotes
-or want to use lirc with the device instead of the kernel driver.
+The remote will only support the 6 (old white) or 7 (brushed metal) buttons
+of the remotes as sold by Apple. See the next section if you want to use
+other remotes or want to use lirc with the device instead of the kernel driver.
 
 Using lirc (native) instead of the kernel driver
 ------------------------------------------------

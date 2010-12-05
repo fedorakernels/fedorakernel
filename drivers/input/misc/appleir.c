@@ -36,12 +36,14 @@ MODULE_LICENSE(DRIVER_LICENSE);
 
 #define USB_VENDOR_ID_APPLE			0x05ac
 #define USB_DEVICE_ID_APPLE_IRCONTROL		0x8240
-#define USB_DEVICE_ID_APPLE_ATV_IRCONTROL	0x8241
+#define USB_DEVICE_ID_APPLE_IRCONTROL2		0x1440
+#define USB_DEVICE_ID_APPLE_IRCONTROL3		0x8241
 #define USB_DEVICE_ID_APPLE_IRCONTROL4		0x8242
+#define USB_DEVICE_ID_APPLE_IRCONTROL5		0x8243
 
 #define URB_SIZE	32
 
-#define MAX_KEYS	8
+#define MAX_KEYS	9
 #define MAX_KEYS_MASK	(MAX_KEYS - 1)
 
 #define dbginfo(dev, format, arg...) do { if (debug) dev_info(dev , format , ## arg); } while (0)
@@ -81,6 +83,13 @@ MODULE_PARM_DESC(debug, "Enable extra debug messages and information");
 /* 25 87 ee 47 02 	menu */
 /* 26 87 ee 47 ** 	for key repeat (** is the code of the key being held) */
 
+/* Bastien Nocera's "new" remote */
+/* 25 87 ee 91 5f	followed by
+ * 25 87 ee 91 05	gives you >"
+ *
+ * 25 87 ee 91 5c	followed by
+ * 25 87 ee 91 05	gives you the middle button */
+
 static const unsigned short appleir_key_table[] = {
 	KEY_RESERVED,
 	KEY_MENU,
@@ -89,6 +98,7 @@ static const unsigned short appleir_key_table[] = {
 	KEY_BACK,
 	KEY_VOLUMEUP,
 	KEY_VOLUMEDOWN,
+	KEY_ENTER,
 	KEY_RESERVED,
 };
 
@@ -102,6 +112,7 @@ struct appleir {
 	struct urb *urb;
 	struct timer_list key_up_timer;
 	int current_key;
+	int prev_key_idx;
 	char phys[32];
 };
 
@@ -114,8 +125,10 @@ enum {
 
 static struct usb_device_id appleir_ids[] = {
 	{ USB_DEVICE(USB_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_IRCONTROL) },
-	{ USB_DEVICE(USB_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_ATV_IRCONTROL) },
+	{ USB_DEVICE(USB_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_IRCONTROL2) },
+	{ USB_DEVICE(USB_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_IRCONTROL3) },
 	{ USB_DEVICE(USB_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_IRCONTROL4) },
+	{ USB_DEVICE(USB_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_IRCONTROL5) },
 	{}
 };
 MODULE_DEVICE_TABLE(usb, appleir_ids);
@@ -128,7 +141,43 @@ static void dump_packet(struct appleir *appleir, char *msg, u8 *data, int len)
 
 	for (i = 0; i < len; ++i)
 		printk(" %02x", data[i]);
-	printk("\n");
+	printk(" (should be command %d)\n", (data[4] >> 1) & MAX_KEYS_MASK);
+}
+
+static int get_key(int data)
+{
+	switch (data) {
+	case 0x02:
+	case 0x03:
+		/* menu */
+		return 1;
+	case 0x04:
+	case 0x05:
+		/* >" */
+		return 2;
+	case 0x06:
+	case 0x07:
+		/* >> */
+		return 3;
+	case 0x08:
+	case 0x09:
+		/* << */
+		return 4;
+	case 0x0a:
+	case 0x0b:
+		/* + */
+		return 5;
+	case 0x0c:
+	case 0x0d:
+		/* - */
+		return 6;
+	case 0x5c:
+		/* Middle button, on newer remotes,
+		 * part of a 2 packet-command */
+		return -7;
+	default:
+		return -1;
+	}
 }
 
 static void key_up(struct appleir *appleir, int key)
@@ -173,19 +222,36 @@ static void new_data(struct appleir *appleir, u8 *data, int len)
 		return;
 
 	if (!memcmp(data, keydown, sizeof(keydown))) {
+		int index;
+
 		/* If we already have a key down, take it up before marking
 		   this one down */
 		if (appleir->current_key)
 			key_up(appleir, appleir->current_key);
-		appleir->current_key = appleir->keymap[(data[4] >> 1) & MAX_KEYS_MASK];
 
-		key_down(appleir, appleir->current_key);
-		/* Remote doesn't do key up, either pull them up, in the test
-		   above, or here set a timer which pulls them up after 1/8 s */
-		mod_timer(&appleir->key_up_timer, jiffies + HZ / 8);
+		/* Handle dual packet commands */
+		if (appleir->prev_key_idx > 0)
+			index = appleir->prev_key_idx;
+		else
+			index = get_key(data[4]);
 
-		return;
+		if (index > 0) {
+			appleir->current_key = appleir->keymap[index];
+
+			key_down(appleir, appleir->current_key);
+			/* Remote doesn't do key up, either pull them up, in the test
+			   above, or here set a timer which pulls them up after 1/8 s */
+			mod_timer(&appleir->key_up_timer, jiffies + HZ / 8);
+			appleir->prev_key_idx = 0;
+			return;
+		} else if (index == -7) {
+			/* Remember key for next packet */
+			appleir->prev_key_idx = 0 - index;
+			return;
+		}
 	}
+
+	appleir->prev_key_idx = 0;
 
 	if (!memcmp(data, keyrepeat, sizeof(keyrepeat))) {
 		key_down(appleir, appleir->current_key);
