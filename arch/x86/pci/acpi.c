@@ -16,7 +16,11 @@ struct pci_root_info {
 	int busnum;
 };
 
+#ifdef CONFIG_PCI_DEFAULT_USE_CRS
 static bool pci_use_crs = true;
+#else
+static bool pci_use_crs = false;
+#endif
 
 static int __init set_use_crs(const struct dmi_system_id *id)
 {

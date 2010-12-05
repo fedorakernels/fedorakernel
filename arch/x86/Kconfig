@@ -2142,3 +2142,8 @@ source "crypto/Kconfig"
 source "arch/x86/kvm/Kconfig"
 
 source "lib/Kconfig"
+
+config PCI_DEFAULT_USE_CRS
+	def_bool y
+	prompt "Use PCI Host Bridge Windows from ACPI by default?"
+	depends on ACPI
