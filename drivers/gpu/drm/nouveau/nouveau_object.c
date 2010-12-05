@@ -1092,7 +1092,7 @@ nouveau_gpuobj_channel_takedown(struct nouveau_channel *chan)
 	for (i = 0; i < dev_priv->vm_vram_pt_nr; i++)
 		nouveau_gpuobj_ref_del(dev, &chan->vm_vram_pt[i]);
 
-	if (chan->ramin_heap.fl_entry.next)
+	if (chan->ramin_heap.free_stack.next)
 		drm_mm_takedown(&chan->ramin_heap);
 	if (chan->ramin)
 		nouveau_gpuobj_ref_del(dev, &chan->ramin);

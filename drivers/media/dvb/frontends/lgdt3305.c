@@ -1,7 +1,9 @@
 /*
  *    Support for LG Electronics LGDT3304 and LGDT3305 - VSB/QAM
  *
- *    Copyright (C) 2008, 2009 Michael Krufky <mkrufky@linuxtv.org>
+ *    Copyright (C) 2008, 2009, 2010 Michael Krufky <mkrufky@linuxtv.org>
+ *
+ *    LGDT3304 support by Jarod Wilson <jarod@redhat.com>
  *
  *    This program is free software; you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -64,6 +66,8 @@ struct lgdt3305_state {
 };
 
 /* ------------------------------------------------------------------------ */
+
+/* FIXME: verify & document the LGDT3304 registers */
 
 #define LGDT3305_GEN_CTRL_1                   0x0000
 #define LGDT3305_GEN_CTRL_2                   0x0001
@@ -358,10 +362,12 @@ static int lgdt3305_rfagc_loop(struct lgdt3305_state *state,
 	case QAM_256:
 		agcdelay = 0x046b;
 		rfbw     = 0x8889;
-		if (state->cfg->demod_chip == LGDT3305)
-			ifbw = 0x8888;
-		else
+		/* FIXME: investigate optimal ifbw & rfbw values for the
+		 *        DT3304 and re-write this switch..case block */
+		if (state->cfg->demod_chip == LGDT3304)
 			ifbw = 0x6666;
+		else /* (state->cfg->demod_chip == LGDT3305) */
+			ifbw = 0x8888;
 		break;
 	default:
 		return -EINVAL;
@@ -557,11 +563,6 @@ static int lgdt3305_i2c_gate_ctrl(struct dvb_frontend *fe, int enable)
 				    enable ? 0 : 1);
 }
 
-static int lgdt3304_sleep(struct dvb_frontend *fe)
-{
-	return 0;
-}
-
 static int lgdt3305_sleep(struct dvb_frontend *fe)
 {
 	struct lgdt3305_state *state = fe->demodulator_priv;
@@ -590,115 +591,84 @@ static int lgdt3305_sleep(struct dvb_frontend *fe)
 	return 0;
 }
 
-static int lgdt3304_init(struct dvb_frontend *fe)
-{
-	struct lgdt3305_state *state = fe->demodulator_priv;
-	int ret;
-
-	static struct lgdt3305_reg lgdt3304_init_data[] = {
-		{ .reg = LGDT3305_GEN_CTRL_1,     .val = 0x03, },
-		{ .reg = 0x000d,                  .val = 0x02, },
-		{ .reg = 0x000e,                  .val = 0x02, },
-		{ .reg = LGDT3305_DGTL_AGC_REF_1, .val = 0x32, },
-		{ .reg = LGDT3305_DGTL_AGC_REF_2, .val = 0xc4, },
-		{ .reg = LGDT3305_CR_CTR_FREQ_1,  .val = 0x00, },
-		{ .reg = LGDT3305_CR_CTR_FREQ_2,  .val = 0x00, },
-		{ .reg = LGDT3305_CR_CTR_FREQ_3,  .val = 0x00, },
-		{ .reg = LGDT3305_CR_CTR_FREQ_4,  .val = 0x00, },
-		{ .reg = LGDT3305_CR_CTRL_7,      .val = 0xf9, },
-		{ .reg = 0x0112,                  .val = 0x17, },
-		{ .reg = 0x0113,                  .val = 0x15, },
-		{ .reg = 0x0114,                  .val = 0x18, },
-		{ .reg = 0x0115,                  .val = 0xff, },
-		{ .reg = 0x0116,                  .val = 0x3c, },
-		{ .reg = 0x0214,                  .val = 0x67, },
-		{ .reg = 0x0424,                  .val = 0x8d, },
-		{ .reg = 0x0427,                  .val = 0x12, },
-		{ .reg = 0x0428,                  .val = 0x4f, },
-		{ .reg = LGDT3305_IFBW_1,         .val = 0x80, },
-		{ .reg = LGDT3305_IFBW_2,         .val = 0x00, },
-		{ .reg = 0x030a,                  .val = 0x08, },
-		{ .reg = 0x030b,                  .val = 0x9b, },
-		{ .reg = 0x030d,                  .val = 0x00, },
-		{ .reg = 0x030e,                  .val = 0x1c, },
-		{ .reg = 0x0314,                  .val = 0xe1, },
-		{ .reg = 0x000d,                  .val = 0x82, },
-		{ .reg = LGDT3305_TP_CTRL_1,      .val = 0x5b, },
-		{ .reg = LGDT3305_TP_CTRL_1,      .val = 0x5b, },
-	};
-
-	lg_dbg("\n");
-
-	ret = lgdt3305_write_regs(state, lgdt3304_init_data,
-				  ARRAY_SIZE(lgdt3304_init_data));
-	if (lg_fail(ret))
-		goto fail;
-
-	ret = lgdt3305_soft_reset(state);
-fail:
-	return ret;
-}
-
 static int lgdt3305_init(struct dvb_frontend *fe)
 {
 	struct lgdt3305_state *state = fe->demodulator_priv;
 	int ret;
 
+	static struct lgdt3305_reg lgdt3304_init_data[] = {
+		{ .reg = LGDT3305_GEN_CTRL_1,           .val = 0x03, },
+		{ .reg = 0x000d,                        .val = 0x02, },
+		{ .reg = 0x000e,                        .val = 0x02, },
+		{ .reg = LGDT3305_DGTL_AGC_REF_1,       .val = 0x32, },
+		{ .reg = LGDT3305_DGTL_AGC_REF_2,       .val = 0xc4, },
+		{ .reg = LGDT3305_CR_CTR_FREQ_1,        .val = 0x00, },
+		{ .reg = LGDT3305_CR_CTR_FREQ_2,        .val = 0x00, },
+		{ .reg = LGDT3305_CR_CTR_FREQ_3,        .val = 0x00, },
+		{ .reg = LGDT3305_CR_CTR_FREQ_4,        .val = 0x00, },
+		{ .reg = LGDT3305_CR_CTRL_7,            .val = 0xf9, },
+		{ .reg = 0x0112,                        .val = 0x17, },
+		{ .reg = 0x0113,                        .val = 0x15, },
+		{ .reg = 0x0114,                        .val = 0x18, },
+		{ .reg = 0x0115,                        .val = 0xff, },
+		{ .reg = 0x0116,                        .val = 0x3c, },
+		{ .reg = 0x0214,                        .val = 0x67, },
+		{ .reg = 0x0424,                        .val = 0x8d, },
+		{ .reg = 0x0427,                        .val = 0x12, },
+		{ .reg = 0x0428,                        .val = 0x4f, },
+		{ .reg = LGDT3305_IFBW_1,               .val = 0x80, },
+		{ .reg = LGDT3305_IFBW_2,               .val = 0x00, },
+		{ .reg = 0x030a,                        .val = 0x08, },
+		{ .reg = 0x030b,                        .val = 0x9b, },
+		{ .reg = 0x030d,                        .val = 0x00, },
+		{ .reg = 0x030e,                        .val = 0x1c, },
+		{ .reg = 0x0314,                        .val = 0xe1, },
+		{ .reg = 0x000d,                        .val = 0x82, },
+		{ .reg = LGDT3305_TP_CTRL_1,            .val = 0x5b, },
+		{ .reg = LGDT3305_TP_CTRL_1,            .val = 0x5b, },
+	};
+
 	static struct lgdt3305_reg lgdt3305_init_data[] = {
-		{ .reg = LGDT3305_GEN_CTRL_1,
-		  .val = 0x03, },
-		{ .reg = LGDT3305_GEN_CTRL_2,
-		  .val = 0xb0, },
-		{ .reg = LGDT3305_GEN_CTRL_3,
-		  .val = 0x01, },
-		{ .reg = LGDT3305_GEN_CONTROL,
-		  .val = 0x6f, },
-		{ .reg = LGDT3305_GEN_CTRL_4,
-		  .val = 0x03, },
-		{ .reg = LGDT3305_DGTL_AGC_REF_1,
-		  .val = 0x32, },
-		{ .reg = LGDT3305_DGTL_AGC_REF_2,
-		  .val = 0xc4, },
-		{ .reg = LGDT3305_CR_CTR_FREQ_1,
-		  .val = 0x00, },
-		{ .reg = LGDT3305_CR_CTR_FREQ_2,
-		  .val = 0x00, },
-		{ .reg = LGDT3305_CR_CTR_FREQ_3,
-		  .val = 0x00, },
-		{ .reg = LGDT3305_CR_CTR_FREQ_4,
-		  .val = 0x00, },
-		{ .reg = LGDT3305_CR_CTRL_7,
-		  .val = 0x79, },
-		{ .reg = LGDT3305_AGC_POWER_REF_1,
-		  .val = 0x32, },
-		{ .reg = LGDT3305_AGC_POWER_REF_2,
-		  .val = 0xc4, },
-		{ .reg = LGDT3305_AGC_DELAY_PT_1,
-		  .val = 0x0d, },
-		{ .reg = LGDT3305_AGC_DELAY_PT_2,
-		  .val = 0x30, },
-		{ .reg = LGDT3305_RFAGC_LOOP_FLTR_BW_1,
-		  .val = 0x80, },
-		{ .reg = LGDT3305_RFAGC_LOOP_FLTR_BW_2,
-		  .val = 0x00, },
-		{ .reg = LGDT3305_IFBW_1,
-		  .val = 0x80, },
-		{ .reg = LGDT3305_IFBW_2,
-		  .val = 0x00, },
-		{ .reg = LGDT3305_AGC_CTRL_1,
-		  .val = 0x30, },
-		{ .reg = LGDT3305_AGC_CTRL_4,
-		  .val = 0x61, },
-		{ .reg = LGDT3305_FEC_BLOCK_CTRL,
-		  .val = 0xff, },
-		{ .reg = LGDT3305_TP_CTRL_1,
-		  .val = 0x1b, },
+		{ .reg = LGDT3305_GEN_CTRL_1,           .val = 0x03, },
+		{ .reg = LGDT3305_GEN_CTRL_2,           .val = 0xb0, },
+		{ .reg = LGDT3305_GEN_CTRL_3,           .val = 0x01, },
+		{ .reg = LGDT3305_GEN_CONTROL,          .val = 0x6f, },
+		{ .reg = LGDT3305_GEN_CTRL_4,           .val = 0x03, },
+		{ .reg = LGDT3305_DGTL_AGC_REF_1,       .val = 0x32, },
+		{ .reg = LGDT3305_DGTL_AGC_REF_2,       .val = 0xc4, },
+		{ .reg = LGDT3305_CR_CTR_FREQ_1,        .val = 0x00, },
+		{ .reg = LGDT3305_CR_CTR_FREQ_2,        .val = 0x00, },
+		{ .reg = LGDT3305_CR_CTR_FREQ_3,        .val = 0x00, },
+		{ .reg = LGDT3305_CR_CTR_FREQ_4,        .val = 0x00, },
+		{ .reg = LGDT3305_CR_CTRL_7,            .val = 0x79, },
+		{ .reg = LGDT3305_AGC_POWER_REF_1,      .val = 0x32, },
+		{ .reg = LGDT3305_AGC_POWER_REF_2,      .val = 0xc4, },
+		{ .reg = LGDT3305_AGC_DELAY_PT_1,       .val = 0x0d, },
+		{ .reg = LGDT3305_AGC_DELAY_PT_2,       .val = 0x30, },
+		{ .reg = LGDT3305_RFAGC_LOOP_FLTR_BW_1, .val = 0x80, },
+		{ .reg = LGDT3305_RFAGC_LOOP_FLTR_BW_2, .val = 0x00, },
+		{ .reg = LGDT3305_IFBW_1,               .val = 0x80, },
+		{ .reg = LGDT3305_IFBW_2,               .val = 0x00, },
+		{ .reg = LGDT3305_AGC_CTRL_1,           .val = 0x30, },
+		{ .reg = LGDT3305_AGC_CTRL_4,           .val = 0x61, },
+		{ .reg = LGDT3305_FEC_BLOCK_CTRL,       .val = 0xff, },
+		{ .reg = LGDT3305_TP_CTRL_1,            .val = 0x1b, },
 	};
 
 	lg_dbg("\n");
 
-	ret = lgdt3305_write_regs(state, lgdt3305_init_data,
-				  ARRAY_SIZE(lgdt3305_init_data));
+	switch (state->cfg->demod_chip) {
+	case LGDT3304:
+		ret = lgdt3305_write_regs(state, lgdt3304_init_data,
+					  ARRAY_SIZE(lgdt3304_init_data));
+		break;
+	case LGDT3305:
+		ret = lgdt3305_write_regs(state, lgdt3305_init_data,
+					  ARRAY_SIZE(lgdt3305_init_data));
+		break;
+	default:
+		ret = -EINVAL;
+	}
 	if (lg_fail(ret))
 		goto fail;
 
@@ -740,34 +710,22 @@ static int lgdt3304_set_parameters(struct dvb_frontend *fe,
 	switch (param->u.vsb.modulation) {
 	case VSB_8:
 		lgdt3305_write_reg(state, 0x030d, 0x00);
-#if 1
 		lgdt3305_write_reg(state, LGDT3305_CR_CTR_FREQ_1, 0x4f);
 		lgdt3305_write_reg(state, LGDT3305_CR_CTR_FREQ_2, 0x0c);
 		lgdt3305_write_reg(state, LGDT3305_CR_CTR_FREQ_3, 0xac);
 		lgdt3305_write_reg(state, LGDT3305_CR_CTR_FREQ_4, 0xba);
-#endif
 		break;
 	case QAM_64:
 	case QAM_256:
 		lgdt3305_write_reg(state, 0x030d, 0x14);
-#if 1
 		ret = lgdt3305_set_if(state, param);
 		if (lg_fail(ret))
 			goto fail;
-#endif
 		break;
 	default:
 		return -EINVAL;
 	}
 
-#if 0
-	/* the set_if vsb formula doesn't work for the 3304, we end up sending
-	 * 0x40851e07 instead of 0x4f0cacba (which works back to 94050, rather
-	 * than 3250, in the case of the kworld 340u) */
-	ret = lgdt3305_set_if(state, param);
-	if (lg_fail(ret))
-		goto fail;
-#endif
 
 	ret = lgdt3305_spectral_inversion(state, param,
 					  state->cfg->spectral_inversion
@@ -997,10 +955,10 @@ static int lgdt3305_read_status(struct dvb_frontend *fe, fe_status_t *status)
 	switch (state->current_modulation) {
 	case QAM_256:
 	case QAM_64:
-#if 0 /* needed w/3304 to set FE_HAS_SIGNAL */
-		if (cr_lock)
+		/* signal bit is unreliable on the DT3304 in QAM mode */
+		if (((LGDT3304 == state->cfg->demod_chip)) && (cr_lock))
 			*status |= FE_HAS_SIGNAL;
-#endif
+
 		ret = lgdt3305_read_fec_lock_status(state, &fec_lock);
 		if (lg_fail(ret))
 			goto fail;
@@ -1217,8 +1175,7 @@ static struct dvb_frontend_ops lgdt3304_ops = {
 		.caps = FE_CAN_QAM_64 | FE_CAN_QAM_256 | FE_CAN_8VSB
 	},
 	.i2c_gate_ctrl        = lgdt3305_i2c_gate_ctrl,
-	.init                 = lgdt3304_init,
-	.sleep                = lgdt3304_sleep,
+	.init                 = lgdt3305_init,
 	.set_frontend         = lgdt3304_set_parameters,
 	.get_frontend         = lgdt3305_get_frontend,
 	.get_tune_settings    = lgdt3305_get_tune_settings,
@@ -1256,7 +1213,7 @@ static struct dvb_frontend_ops lgdt3305_ops = {
 MODULE_DESCRIPTION("LG Electronics LGDT3304/5 ATSC/QAM-B Demodulator Driver");
 MODULE_AUTHOR("Michael Krufky <mkrufky@linuxtv.org>");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("0.1");
+MODULE_VERSION("0.2");
 
 /*
  * Local variables:

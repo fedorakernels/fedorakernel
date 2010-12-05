@@ -357,13 +357,12 @@
     after a successful call, no event callbacks not requested in the new
     flags will be made.  It fails with <constant>-EALREADY</constant> if
     you try to clear <constant>UTRACE_EVENT(DEATH)</constant> when the
-    <function>report_death</function> callback may already have begun, if
-    you try to clear <constant>UTRACE_EVENT(REAP)</constant> when the
-    <function>report_reap</function> callback may already have begun, or if
+    <function>report_death</function> callback may already have begun, or if
     you try to newly set <constant>UTRACE_EVENT(DEATH)</constant> or
     <constant>UTRACE_EVENT(QUIESCE)</constant> when the target is already
     dead or dying.  Like <function>utrace_control</function>, it returns
-    <constant>-ESRCH</constant> when the thread has already been detached
+    <constant>-ESRCH</constant> when the <function>report_reap</function>
+    callback may already have begun, or the thread has already been detached
     (including forcible detach on reaping).  This lets the tracing engine
     know for sure which event callbacks it will or won't see after
     <function>utrace_set_events</function> has returned.  By checking for

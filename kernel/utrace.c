@@ -228,6 +228,7 @@ static int utrace_add_engine(struct task_struct *target,
 	 */
 	list_add_tail(&engine->entry, &utrace->attaching);
 	utrace->pending_attach = 1;
+	utrace_engine_get(engine);
 	ret = 0;
 unlock:
 	spin_unlock(&utrace->lock);
@@ -301,11 +302,10 @@ struct utrace_engine *utrace_attach_task(
 		return ERR_PTR(-ENOMEM);
 
 	/*
-	 * Initialize the new engine structure.  It starts out with two
-	 * refs: one ref to return, and one ref for being attached.
+	 * Initialize the new engine structure.  It starts out with one ref
+	 * to return.  utrace_add_engine() adds another for being attached.
 	 */
 	kref_init(&engine->kref);
-	kref_get(&engine->kref);
 	engine->flags = 0;
 	engine->ops = ops;
 	engine->data = data;
@@ -317,6 +317,7 @@ struct utrace_engine *utrace_attach_task(
 		kmem_cache_free(utrace_engine_cachep, engine);
 		engine = ERR_PTR(ret);
 	}
+
 
 	return engine;
 }
@@ -422,7 +423,7 @@ static struct utrace *get_utrace_lock(struct task_struct *target,
 
 	utrace = task_utrace_struct(target);
 	spin_lock(&utrace->lock);
-	if (unlikely(!engine->ops) ||
+	if (unlikely(utrace->reap) || unlikely(!engine->ops) ||
 	    unlikely(engine->ops == &utrace_detached_ops)) {
 		/*
 		 * By the time we got the utrace lock,
@@ -488,13 +489,12 @@ static bool engine_wants_stop(struct utrace_engine *engine)
  *
  * This fails with -%EALREADY and does nothing if you try to clear
  * %UTRACE_EVENT(%DEATH) when the @report_death callback may already have
- * begun, if you try to clear %UTRACE_EVENT(%REAP) when the @report_reap
- * callback may already have begun, or if you try to newly set
- * %UTRACE_EVENT(%DEATH) or %UTRACE_EVENT(%QUIESCE) when @target is
- * already dead or dying.
+ * begun, or if you try to newly set %UTRACE_EVENT(%DEATH) or
+ * %UTRACE_EVENT(%QUIESCE) when @target is already dead or dying.
  *
- * This can fail with -%ESRCH when @target has already been detached,
- * including forcible detach on reaping.
+ * This fails with -%ESRCH if you try to clear %UTRACE_EVENT(%REAP) when
+ * the @report_reap callback may already have begun, or when @target has
+ * already been detached, including forcible detach on reaping.
  *
  * If @target was stopped before the call, then after a successful call,
  * no event callbacks not requested in @events will be made; if
@@ -525,7 +525,7 @@ int utrace_set_events(struct task_struct *target,
 {
 	struct utrace *utrace;
 	unsigned long old_flags, old_utrace_flags;
-	int ret;
+	int ret = -EALREADY;
 
 	/*
 	 * We just ignore the internal bit, so callers can use
@@ -540,14 +540,12 @@ int utrace_set_events(struct task_struct *target,
 	old_utrace_flags = target->utrace_flags;
 	old_flags = engine->flags & ~ENGINE_STOP;
 
-	if (target->exit_state &&
-	    (((events & ~old_flags) & _UTRACE_DEATH_EVENTS) ||
-	     (utrace->death &&
-	      ((old_flags & ~events) & _UTRACE_DEATH_EVENTS)) ||
-	     (utrace->reap && ((old_flags & ~events) & UTRACE_EVENT(REAP))))) {
-		spin_unlock(&utrace->lock);
-		return -EALREADY;
-	}
+	/*
+	 * If utrace_report_death() is already progress now,
+	 * it's too late to clear the death event bits.
+	 */
+	if (((old_flags & ~events) & _UTRACE_DEATH_EVENTS) && utrace->death)
+		goto unlock;
 
 	/*
 	 * When setting these flags, it's essential that we really
@@ -559,12 +557,11 @@ int utrace_set_events(struct task_struct *target,
 	 * knows positively that utrace_report_death() will be called or
 	 * that it won't.
 	 */
-	if ((events & ~old_utrace_flags) & _UTRACE_DEATH_EVENTS) {
+	if ((events & ~old_flags) & _UTRACE_DEATH_EVENTS) {
 		read_lock(&tasklist_lock);
 		if (unlikely(target->exit_state)) {
 			read_unlock(&tasklist_lock);
-			spin_unlock(&utrace->lock);
-			return -EALREADY;
+			goto unlock;
 		}
 		target->utrace_flags |= events;
 		read_unlock(&tasklist_lock);
@@ -592,7 +589,7 @@ int utrace_set_events(struct task_struct *target,
 		if (utrace->reporting == engine)
 			ret = -EINPROGRESS;
 	}
-
+unlock:
 	spin_unlock(&utrace->lock);
 
 	return ret;

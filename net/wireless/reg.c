@@ -72,7 +72,7 @@ const struct ieee80211_regdomain *cfg80211_regdomain;
  *     - cfg80211_regdom
  *     - last_request
  */
-DEFINE_MUTEX(reg_mutex);
+static DEFINE_MUTEX(reg_mutex);
 #define assert_reg_lock() WARN_ON(!mutex_is_locked(&reg_mutex))
 
 /* Used to queue up regulatory hints */
@@ -1306,6 +1306,7 @@ static void reg_process_hint(struct regulatory_request *reg_request)
 {
 	int r = 0;
 	struct wiphy *wiphy = NULL;
+	enum nl80211_reg_initiator initiator = reg_request->initiator;
 
 	BUG_ON(!reg_request->alpha2);
 
@@ -1325,7 +1326,7 @@ static void reg_process_hint(struct regulatory_request *reg_request)
 	/* This is required so that the orig_* parameters are saved */
 	if (r == -EALREADY && wiphy &&
 	    wiphy->flags & WIPHY_FLAG_STRICT_REGULATORY)
-		wiphy_update_regulatory(wiphy, reg_request->initiator);
+		wiphy_update_regulatory(wiphy, initiator);
 out:
 	mutex_unlock(&reg_mutex);
 	mutex_unlock(&cfg80211_mutex);
@@ -1483,39 +1484,6 @@ int regulatory_hint(struct wiphy *wiphy, const char *alpha2)
 }
 EXPORT_SYMBOL(regulatory_hint);
 
-/* Caller must hold reg_mutex */
-static bool reg_same_country_ie_hint(struct wiphy *wiphy,
-			char *alpha2, enum environment_cap env)
-{
-	struct wiphy *request_wiphy;
-
-	assert_reg_lock();
-
-	if (unlikely(last_request->initiator !=
-	    NL80211_REGDOM_SET_BY_COUNTRY_IE))
-		return false;
-
-	request_wiphy = wiphy_idx_to_wiphy(last_request->wiphy_idx);
-
-	if (!request_wiphy)
-		return false;
-
-	if (likely(request_wiphy != wiphy))
-		return (last_request->alpha2[0] == alpha2[0] &&
-			last_request->alpha2[1] == alpha2[1] &&
-			last_request->country_ie_env == env);
-	/*
-	 * We should not have let these through at this point, they
-	 * should have been picked up earlier by the first alpha2 check
-	 * on the device
-	 */
-	if (WARN_ON((last_request->alpha2[0] == alpha2[0] &&
-			last_request->alpha2[1] == alpha2[1] &&
-			last_request->country_ie_env == env )))
-		return true;
-	return false;
-}
-
 /*
  * We hold wdev_lock() here so we cannot hold cfg80211_mutex() and
  * therefore cannot iterate over the rdev list here.
@@ -1525,7 +1493,6 @@ void regulatory_hint_11d(struct wiphy *wiphy,
 			 u8 *country_ie,
 			 u8 country_ie_len)
 {
-	struct ieee80211_regdomain *rd = NULL;
 	char alpha2[2];
 	enum environment_cap env = ENVIRON_ANY;
 	struct regulatory_request *request;
@@ -1560,21 +1527,9 @@ void regulatory_hint_11d(struct wiphy *wiphy,
 	    wiphy_idx_valid(last_request->wiphy_idx)))
 		goto out;
 
-	/*
-	 * This will not happen right now but we leave it here for the
-	 * the future when we want to add suspend/resume support and having
-	 * the user move to another country after doing so, or having the user
-	 * move to another AP. Right now we just trust the first AP.
-	 *
-	 * If we hit this before we add this support we want to be informed of
-	 * it as it would indicate a mistake in the current design
-	 */
-	if (WARN_ON(reg_same_country_ie_hint(wiphy, alpha2, env)))
-		goto free_rd_out;
-
 	request = kzalloc(sizeof(struct regulatory_request), GFP_KERNEL);
 	if (!request)
-		goto free_rd_out;
+		goto out;
 
 	request->wiphy_idx = get_wiphy_idx(wiphy);
 	request->alpha2[0] = alpha2[0];
@@ -1588,8 +1543,6 @@ void regulatory_hint_11d(struct wiphy *wiphy,
 
 	return;
 
-free_rd_out:
-	kfree(rd);
 out:
 	mutex_unlock(&reg_mutex);
 }
@@ -2032,7 +1985,7 @@ out:
 	mutex_unlock(&reg_mutex);
 }
 
-int regulatory_init(void)
+int __init regulatory_init(void)
 {
 	int err = 0;
 
@@ -2078,7 +2031,7 @@ int regulatory_init(void)
 	return 0;
 }
 
-void regulatory_exit(void)
+void /* __init_or_exit */ regulatory_exit(void)
 {
 	struct regulatory_request *reg_request, *tmp;
 	struct reg_beacon *reg_beacon, *btmp;

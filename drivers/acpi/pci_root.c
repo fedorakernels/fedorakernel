@@ -545,9 +545,9 @@ static int __devinit acpi_pci_root_add(struct acpi_device *device)
 		acpi_pci_osc_support(root, flags);
 
 	status = acpi_pci_osc_control_set(root->device->handle,
-					  0);
+					  OSC_PCI_EXPRESS_CAP_STRUCTURE_CONTROL);
 
-	if (status == AE_NOT_EXIST) {
+	if (ACPI_FAILURE(status)) {
 		printk(KERN_INFO "Unable to assume PCIe control: Disabling ASPM\n");
 		pcie_no_aspm();
 	}

@@ -239,7 +239,7 @@ nv50_instmem_init(struct drm_device *dev)
 		return ret;
 	BAR0_WI32(priv->fb_bar->gpuobj, 0x00, 0x7fc00000);
 	BAR0_WI32(priv->fb_bar->gpuobj, 0x04, 0x40000000 +
-					      drm_get_resource_len(dev, 1) - 1);
+					      pci_resource_len(dev->pdev, 1) - 1);
 	BAR0_WI32(priv->fb_bar->gpuobj, 0x08, 0x40000000);
 	BAR0_WI32(priv->fb_bar->gpuobj, 0x0c, 0x00000000);
 	BAR0_WI32(priv->fb_bar->gpuobj, 0x10, 0x00000000);
@@ -487,7 +487,7 @@ void
 nv50_instmem_flush(struct drm_device *dev)
 {
 	nv_wr32(dev, 0x00330c, 0x00000001);
-	if (!nv_wait(0x00330c, 0x00000001, 0x00000000))
+	if (!nv_wait(0x00330c, 0x00000002, 0x00000000))
 		NV_ERROR(dev, "PRAMIN flush timeout\n");
 }
 
@@ -495,7 +495,7 @@ void
 nv84_instmem_flush(struct drm_device *dev)
 {
 	nv_wr32(dev, 0x070000, 0x00000001);
-	if (!nv_wait(0x070000, 0x00000001, 0x00000000))
+	if (!nv_wait(0x070000, 0x00000002, 0x00000000))
 		NV_ERROR(dev, "PRAMIN flush timeout\n");
 }
 
@@ -506,3 +506,4 @@ nv50_vm_flush(struct drm_device *dev, int engine)
 	if (!nv_wait(0x100c80, 0x00000001, 0x00000000))
 		NV_ERROR(dev, "vm flush timeout: engine %d\n", engine);
 }
+

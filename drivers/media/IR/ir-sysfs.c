@@ -33,6 +33,21 @@ static struct class ir_input_class = {
 	.devnode	= ir_devnode,
 };
 
+static struct {
+	u64	type;
+	char	*name;
+} proto_names[] = {
+	{ IR_TYPE_UNKNOWN,	"unknown"	},
+	{ IR_TYPE_RC5,		"rc-5"		},
+	{ IR_TYPE_NEC,		"nec"		},
+	{ IR_TYPE_RC6,		"rc-6"		},
+	{ IR_TYPE_JVC,		"jvc"		},
+	{ IR_TYPE_SONY,		"sony"		},
+	{ IR_TYPE_LIRC,		"lirc"		},
+};
+
+#define PROTO_NONE	"none"
+
 /**
  * show_protocols() - shows the current IR protocol(s)
  * @d:		the device descriptor
@@ -50,6 +65,7 @@ static ssize_t show_protocols(struct device *d,
 	struct ir_input_dev *ir_dev = dev_get_drvdata(d);
 	u64 allowed, enabled;
 	char *tmp = buf;
+	int i;
 
 	if (ir_dev->props->driver_type == RC_DRIVER_SCANCODE) {
 		enabled = ir_dev->rc_tab.ir_type;
@@ -63,40 +79,12 @@ static ssize_t show_protocols(struct device *d,
 		   (long long)allowed,
 		   (long long)enabled);
 
-	if (allowed & enabled & IR_TYPE_UNKNOWN)
-		tmp += sprintf(tmp, "[unknown] ");
-	else if (allowed & IR_TYPE_UNKNOWN)
-		tmp += sprintf(tmp, "unknown ");
-
-	if (allowed & enabled & IR_TYPE_RC5)
-		tmp += sprintf(tmp, "[rc5] ");
-	else if (allowed & IR_TYPE_RC5)
-		tmp += sprintf(tmp, "rc5 ");
-
-	if (allowed & enabled & IR_TYPE_NEC)
-		tmp += sprintf(tmp, "[nec] ");
-	else if (allowed & IR_TYPE_NEC)
-		tmp += sprintf(tmp, "nec ");
-
-	if (allowed & enabled & IR_TYPE_RC6)
-		tmp += sprintf(tmp, "[rc6] ");
-	else if (allowed & IR_TYPE_RC6)
-		tmp += sprintf(tmp, "rc6 ");
-
-	if (allowed & enabled & IR_TYPE_JVC)
-		tmp += sprintf(tmp, "[jvc] ");
-	else if (allowed & IR_TYPE_JVC)
-		tmp += sprintf(tmp, "jvc ");
-
-	if (allowed & enabled & IR_TYPE_SONY)
-		tmp += sprintf(tmp, "[sony] ");
-	else if (allowed & IR_TYPE_SONY)
-		tmp += sprintf(tmp, "sony ");
-
-	if (allowed & enabled & IR_TYPE_LIRC)
-		tmp += sprintf(tmp, "[lirc] ");
-	else if (allowed & IR_TYPE_LIRC)
-		tmp += sprintf(tmp, "lirc ");
+	for (i = 0; i < ARRAY_SIZE(proto_names); i++) {
+		if (allowed & enabled & proto_names[i].type)
+			tmp += sprintf(tmp, "[%s] ", proto_names[i].name);
+		else if (allowed & proto_names[i].type)
+			tmp += sprintf(tmp, "%s ", proto_names[i].name);
+	}
 
 	if (tmp != buf)
 		tmp--;
@@ -116,6 +104,7 @@ static ssize_t show_protocols(struct device *d,
  * Writing "+proto" will add a protocol to the list of enabled protocols.
  * Writing "-proto" will remove a protocol from the list of enabled protocols.
  * Writing "proto" will enable only "proto".
+ * Writing "none" will disable all protocols.
  * Returns -EINVAL if an invalid protocol combination or unknown protocol name
  * is used, otherwise @len.
  */
@@ -129,67 +118,62 @@ static ssize_t store_protocols(struct device *d,
 	const char *tmp;
 	u64 type;
 	u64 mask;
-	int rc;
+	int rc, i, count = 0;
 	unsigned long flags;
-
-	tmp = skip_spaces(data);
-
-	if (*tmp == '+') {
-		enable = true;
-		disable = false;
-		tmp++;
-	} else if (*tmp == '-') {
-		enable = false;
-		disable = true;
-		tmp++;
-	} else {
-		enable = false;
-		disable = false;
-	}
-
-	if (!strncasecmp(tmp, "unknown", 7)) {
-		tmp += 7;
-		mask = IR_TYPE_UNKNOWN;
-	} else if (!strncasecmp(tmp, "rc5", 3)) {
-		tmp += 3;
-		mask = IR_TYPE_RC5;
-	} else if (!strncasecmp(tmp, "nec", 3)) {
-		tmp += 3;
-		mask = IR_TYPE_NEC;
-	} else if (!strncasecmp(tmp, "rc6", 3)) {
-		tmp += 3;
-		mask = IR_TYPE_RC6;
-	} else if (!strncasecmp(tmp, "jvc", 3)) {
-		tmp += 3;
-		mask = IR_TYPE_JVC;
-	} else if (!strncasecmp(tmp, "sony", 4)) {
-		tmp += 4;
-		mask = IR_TYPE_SONY;
-	} else if (!strncasecmp(tmp, "lirc", 4)) {
-		tmp += 4;
-		mask = IR_TYPE_LIRC;
-	} else {
-		IR_dprintk(1, "Unknown protocol\n");
-		return -EINVAL;
-	}
-
-	tmp = skip_spaces(tmp);
-	if (*tmp != '\0') {
-		IR_dprintk(1, "Invalid trailing characters\n");
-		return -EINVAL;
-	}
 
 	if (ir_dev->props->driver_type == RC_DRIVER_SCANCODE)
 		type = ir_dev->rc_tab.ir_type;
 	else
 		type = ir_dev->raw->enabled_protocols;
 
-	if (enable)
-		type |= mask;
-	else if (disable)
-		type &= ~mask;
-	else
-		type = mask;
+	while ((tmp = strsep((char **) &data, " \n")) != NULL) {
+		if (!*tmp)
+			break;
+
+		if (*tmp == '+') {
+			enable = true;
+			disable = false;
+			tmp++;
+		} else if (*tmp == '-') {
+			enable = false;
+			disable = true;
+			tmp++;
+		} else {
+			enable = false;
+			disable = false;
+		}
+
+		if (!enable && !disable && !strncasecmp(tmp, PROTO_NONE, sizeof(PROTO_NONE))) {
+			tmp += sizeof(PROTO_NONE);
+			mask = 0;
+			count++;
+		} else {
+			for (i = 0; i < ARRAY_SIZE(proto_names); i++) {
+				if (!strncasecmp(tmp, proto_names[i].name, strlen(proto_names[i].name))) {
+					tmp += strlen(proto_names[i].name);
+					mask = proto_names[i].type;
+					break;
+				}
+			}
+			if (i == ARRAY_SIZE(proto_names)) {
+				IR_dprintk(1, "Unknown protocol: '%s'\n", tmp);
+				return -EINVAL;
+			}
+			count++;
+		}
+
+		if (enable)
+			type |= mask;
+		else if (disable)
+			type &= ~mask;
+		else
+			type = mask;
+	}
+
+	if (!count) {
+		IR_dprintk(1, "Protocol not specified\n");
+		return -EINVAL;
+	}
 
 	if (ir_dev->props && ir_dev->props->change_protocol) {
 		rc = ir_dev->props->change_protocol(ir_dev->props->priv,
@@ -208,7 +192,6 @@ static ssize_t store_protocols(struct device *d,
 	} else {
 		ir_dev->raw->enabled_protocols = type;
 	}
-
 
 	IR_dprintk(1, "Current protocol(s): 0x%llx\n",
 		   (long long)type);
@@ -278,6 +261,7 @@ int ir_register_class(struct input_dev *input_dev)
 		return devno;
 
 	ir_dev->dev.type = &rc_dev_type;
+
 	ir_dev->dev.class = &ir_input_class;
 	ir_dev->dev.parent = input_dev->dev.parent;
 	dev_set_name(&ir_dev->dev, "rc%d", devno);
@@ -341,6 +325,7 @@ static int __init ir_core_init(void)
 
 	/* Initialize/load the decoders/keymap code that will be used */
 	ir_raw_init();
+	ir_rcmap_init();
 
 	return 0;
 }
@@ -348,6 +333,7 @@ static int __init ir_core_init(void)
 static void __exit ir_core_exit(void)
 {
 	class_unregister(&ir_input_class);
+	ir_rcmap_cleanup();
 }
 
 module_init(ir_core_init);

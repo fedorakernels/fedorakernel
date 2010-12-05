@@ -196,25 +196,6 @@ struct uvc_device;
 /* TODO: Put the most frequently accessed fields at the beginning of
  * structures to maximize cache efficiency.
  */
-struct uvc_streaming_control {
-	__u16 bmHint;
-	__u8  bFormatIndex;
-	__u8  bFrameIndex;
-	__u32 dwFrameInterval;
-	__u16 wKeyFrameRate;
-	__u16 wPFrameRate;
-	__u16 wCompQuality;
-	__u16 wCompWindowSize;
-	__u16 wDelay;
-	__u32 dwMaxVideoFrameSize;
-	__u32 dwMaxPayloadTransferSize;
-	__u32 dwClockFrequency;
-	__u8  bmFramingInfo;
-	__u8  bPreferedVersion;
-	__u8  bMinVersion;
-	__u8  bMaxVersion;
-};
-
 struct uvc_control_info {
 	struct list_head list;
 	struct list_head mappings;
@@ -262,7 +243,8 @@ struct uvc_control {
 	     modified : 1,
 	     cached : 1;
 
-	__u8 *data;
+	__u8 *uvc_data;
+	__u8 *uvc_info;
 };
 
 struct uvc_format_desc {
@@ -397,11 +379,12 @@ struct uvc_buffer {
 	struct list_head queue;
 	wait_queue_head_t wait;
 	enum uvc_buffer_state state;
+	unsigned int error;
 };
 
 #define UVC_QUEUE_STREAMING		(1 << 0)
 #define UVC_QUEUE_DISCONNECTED		(1 << 1)
-#define UVC_QUEUE_DROP_INCOMPLETE	(1 << 2)
+#define UVC_QUEUE_DROP_CORRUPTED	(1 << 2)
 
 struct uvc_video_queue {
 	enum v4l2_buf_type type;
@@ -580,7 +563,7 @@ extern struct uvc_driver uvc_driver;
 
 /* Video buffers queue management. */
 extern void uvc_queue_init(struct uvc_video_queue *queue,
-		enum v4l2_buf_type type);
+		enum v4l2_buf_type type, int drop_corrupted);
 extern int uvc_alloc_buffers(struct uvc_video_queue *queue,
 		unsigned int nbuffers, unsigned int buflength);
 extern int uvc_free_buffers(struct uvc_video_queue *queue);

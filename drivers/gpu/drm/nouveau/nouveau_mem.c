@@ -249,9 +249,10 @@ nouveau_mem_close(struct drm_device *dev)
 		dev->agp->enabled = 0;
 	}
 
-	if (dev_priv->fb_mtrr >= 0) {
-		drm_mtrr_del(dev_priv->fb_mtrr, drm_get_resource_start(dev, 1),
-			     drm_get_resource_len(dev, 1), DRM_MTRR_WC);
+	if (dev_priv->fb_mtrr) {
+		drm_mtrr_del(dev_priv->fb_mtrr,
+			     pci_resource_start(dev->pdev, 1),
+			     pci_resource_len(dev->pdev, 1), DRM_MTRR_WC);
 		dev_priv->fb_mtrr = -1;
 	}
 }
@@ -319,7 +320,8 @@ nouveau_mem_detect(struct drm_device *dev)
 	if (dev_priv->card_type < NV_50) {
 		dev_priv->vram_size  = nv_rd32(dev, NV04_PFB_FIFO_DATA);
 		dev_priv->vram_size &= NV10_PFB_FIFO_DATA_RAM_AMOUNT_MB_MASK;
-	} else {
+	} else
+	if (dev_priv->card_type < NV_C0) {
 		dev_priv->vram_size = nv_rd32(dev, NV04_PFB_FIFO_DATA);
 		dev_priv->vram_size |= (dev_priv->vram_size & 0xff) << 32;
 		dev_priv->vram_size &= 0xffffffff00ll;
@@ -327,6 +329,9 @@ nouveau_mem_detect(struct drm_device *dev)
 			dev_priv->vram_sys_base = nv_rd32(dev, 0x100e10);
 			dev_priv->vram_sys_base <<= 12;
 		}
+	} else {
+		dev_priv->vram_size  = nv_rd32(dev, 0x10f20c) << 20;
+		dev_priv->vram_size *= nv_rd32(dev, 0x121c74);
 	}
 
 	NV_INFO(dev, "Detected %dMiB VRAM\n", (int)(dev_priv->vram_size >> 20));
@@ -340,18 +345,36 @@ nouveau_mem_detect(struct drm_device *dev)
 	return -ENOMEM;
 }
 
-#if __OS_HAS_AGP
-static void nouveau_mem_reset_agp(struct drm_device *dev)
+int
+nouveau_mem_reset_agp(struct drm_device *dev)
 {
-	uint32_t saved_pci_nv_1, saved_pci_nv_19, pmc_enable;
+#if __OS_HAS_AGP
+	uint32_t saved_pci_nv_1, pmc_enable;
+	int ret;
+
+	/* First of all, disable fast writes, otherwise if it's
+	 * already enabled in the AGP bridge and we disable the card's
+	 * AGP controller we might be locking ourselves out of it. */
+	if (nv_rd32(dev, NV04_PBUS_PCI_NV_19) & PCI_AGP_COMMAND_FW) {
+		struct drm_agp_info info;
+		struct drm_agp_mode mode;
+
+		ret = drm_agp_info(dev, &info);
+		if (ret)
+			return ret;
+
+		mode.mode = info.mode & ~PCI_AGP_COMMAND_FW;
+		ret = drm_agp_enable(dev, mode);
+		if (ret)
+			return ret;
+	}
 
 	saved_pci_nv_1 = nv_rd32(dev, NV04_PBUS_PCI_NV_1);
-	saved_pci_nv_19 = nv_rd32(dev, NV04_PBUS_PCI_NV_19);
 
 	/* clear busmaster bit */
 	nv_wr32(dev, NV04_PBUS_PCI_NV_1, saved_pci_nv_1 & ~0x4);
-	/* clear SBA and AGP bits */
-	nv_wr32(dev, NV04_PBUS_PCI_NV_19, saved_pci_nv_19 & 0xfffff0ff);
+	/* disable AGP */
+	nv_wr32(dev, NV04_PBUS_PCI_NV_19, 0);
 
 	/* power cycle pgraph, if enabled */
 	pmc_enable = nv_rd32(dev, NV03_PMC_ENABLE);
@@ -363,10 +386,11 @@ static void nouveau_mem_reset_agp(struct drm_device *dev)
 	}
 
 	/* and restore (gives effect of resetting AGP) */
-	nv_wr32(dev, NV04_PBUS_PCI_NV_19, saved_pci_nv_19);
 	nv_wr32(dev, NV04_PBUS_PCI_NV_1, saved_pci_nv_1);
-}
 #endif
+
+	return 0;
+}
 
 int
 nouveau_mem_init_agp(struct drm_device *dev)
@@ -377,11 +401,6 @@ nouveau_mem_init_agp(struct drm_device *dev)
 	struct drm_agp_mode mode;
 	int ret;
 
-	if (nouveau_noagp)
-		return 0;
-
-	nouveau_mem_reset_agp(dev);
-
 	if (!dev->agp->acquired) {
 		ret = drm_agp_acquire(dev);
 		if (ret) {
@@ -389,6 +408,8 @@ nouveau_mem_init_agp(struct drm_device *dev)
 			return ret;
 		}
 	}
+
+	nouveau_mem_reset_agp(dev);
 
 	ret = drm_agp_info(dev, &info);
 	if (ret) {
@@ -418,7 +439,7 @@ nouveau_mem_init(struct drm_device *dev)
 	struct ttm_bo_device *bdev = &dev_priv->ttm.bdev;
 	int ret, dma_bits = 32;
 
-	dev_priv->fb_phys = drm_get_resource_start(dev, 1);
+	dev_priv->fb_phys = pci_resource_start(dev->pdev, 1);
 	dev_priv->gart_info.type = NOUVEAU_GART_NONE;
 
 	if (dev_priv->card_type >= NV_50 &&
@@ -444,14 +465,13 @@ nouveau_mem_init(struct drm_device *dev)
 		return ret;
 	}
 
-	INIT_LIST_HEAD(&dev_priv->ttm.bo_list);
-	spin_lock_init(&dev_priv->ttm.bo_list_lock);
 	spin_lock_init(&dev_priv->tile.lock);
 
 	dev_priv->fb_available_size = dev_priv->vram_size;
 	dev_priv->fb_mappable_pages = dev_priv->fb_available_size;
-	if (dev_priv->fb_mappable_pages > drm_get_resource_len(dev, 1))
-		dev_priv->fb_mappable_pages = drm_get_resource_len(dev, 1);
+	if (dev_priv->fb_mappable_pages > pci_resource_len(dev->pdev, 1))
+		dev_priv->fb_mappable_pages =
+			pci_resource_len(dev->pdev, 1);
 	dev_priv->fb_mappable_pages >>= PAGE_SHIFT;
 
 	/* remove reserved space at end of vram from available amount */
@@ -477,7 +497,7 @@ nouveau_mem_init(struct drm_device *dev)
 
 	/* GART */
 #if !defined(__powerpc__) && !defined(__ia64__)
-	if (drm_device_is_agp(dev) && dev->agp) {
+	if (drm_device_is_agp(dev) && dev->agp && !nouveau_noagp) {
 		ret = nouveau_mem_init_agp(dev);
 		if (ret)
 			NV_ERROR(dev, "Error initialising AGP: %d\n", ret);
@@ -503,8 +523,8 @@ nouveau_mem_init(struct drm_device *dev)
 		return ret;
 	}
 
-	dev_priv->fb_mtrr = drm_mtrr_add(drm_get_resource_start(dev, 1),
-					 drm_get_resource_len(dev, 1),
+	dev_priv->fb_mtrr = drm_mtrr_add(pci_resource_start(dev->pdev, 1),
+					 pci_resource_len(dev->pdev, 1),
 					 DRM_MTRR_WC);
 
 	return 0;

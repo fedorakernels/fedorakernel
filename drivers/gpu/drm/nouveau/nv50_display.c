@@ -76,7 +76,10 @@ nv50_evo_dmaobj_new(struct nouveau_channel *evo, uint32_t class, uint32_t name,
 	nv_wo32(dev, obj, 2, offset);
 	nv_wo32(dev, obj, 3, 0x00000000);
 	nv_wo32(dev, obj, 4, 0x00000000);
-	nv_wo32(dev, obj, 5, 0x00010000);
+	if (dev_priv->card_type < NV_C0)
+		nv_wo32(dev, obj, 5, 0x00010000);
+	else
+		nv_wo32(dev, obj, 5, 0x00020000);
 	dev_priv->engine.instmem.flush(dev);
 
 	return 0;
@@ -178,13 +181,25 @@ nv50_evo_channel_new(struct drm_device *dev, struct nouveau_channel **pchan)
 }
 
 int
+nv50_display_early_init(struct drm_device *dev)
+{
+	return 0;
+}
+
+void
+nv50_display_late_takedown(struct drm_device *dev)
+{
+}
+
+int
 nv50_display_init(struct drm_device *dev)
 {
 	struct drm_nouveau_private *dev_priv = dev->dev_private;
 	struct nouveau_timer_engine *ptimer = &dev_priv->engine.timer;
+	struct nouveau_gpio_engine *pgpio = &dev_priv->engine.gpio;
 	struct nouveau_channel *evo = dev_priv->evo;
 	struct drm_connector *connector;
-	uint32_t val, ram_amount, hpd_en[2];
+	uint32_t val, ram_amount;
 	uint64_t start;
 	int ret, i;
 
@@ -365,26 +380,13 @@ nv50_display_init(struct drm_device *dev)
 					     NV50_PDISPLAY_INTR_EN_CLK_UNK40));
 
 	/* enable hotplug interrupts */
-	hpd_en[0] = hpd_en[1] = 0;
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		struct nouveau_connector *conn = nouveau_connector(connector);
-		struct dcb_gpio_entry *gpio;
 
 		if (conn->dcb->gpio_tag == 0xff)
 			continue;
 
-		gpio = nouveau_bios_gpio_entry(dev, conn->dcb->gpio_tag);
-		if (!gpio)
-			continue;
-
-		hpd_en[gpio->line >> 4] |= (0x00010001 << (gpio->line & 0xf));
-	}
-
-	nv_wr32(dev, 0xe054, 0xffffffff);
-	nv_wr32(dev, 0xe050, hpd_en[0]);
-	if (dev_priv->chipset >= 0x90) {
-		nv_wr32(dev, 0xe074, 0xffffffff);
-		nv_wr32(dev, 0xe070, hpd_en[1]);
+		pgpio->irq_enable(dev, conn->dcb->gpio_tag, true);
 	}
 
 	return 0;
@@ -544,7 +546,8 @@ int nv50_display_create(struct drm_device *dev)
 	return 0;
 }
 
-int nv50_display_destroy(struct drm_device *dev)
+void
+nv50_display_destroy(struct drm_device *dev)
 {
 	struct drm_nouveau_private *dev_priv = dev->dev_private;
 
@@ -554,8 +557,6 @@ int nv50_display_destroy(struct drm_device *dev)
 
 	nv50_display_disable(dev);
 	nv50_evo_channel_del(&dev_priv->evo);
-
-	return 0;
 }
 
 static u16
