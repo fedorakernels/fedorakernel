@@ -1324,7 +1324,7 @@ static int tty_reopen(struct tty_struct *tty)
 	mutex_lock(&tty->ldisc_mutex);
 	if (!test_bit(TTY_LDISC, &tty->flags)) {
 		printk("%s: !test_bit(TTY_LDISC, &tty->flags) dev=%s ldisc=%s\n",
-			__func__, tty->name, tty->ldisc ? tty->ldisc->name : NULL);
+			__func__, tty->name, tty->ldisc ? tty->ldisc->ops ? tty->ldisc->ops->name : NULL : NULL);
 		WARN_ON(1);
 	}
 	mutex_unlock(&tty->ldisc_mutex);
