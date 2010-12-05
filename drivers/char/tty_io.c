@@ -1322,7 +1322,11 @@ static int tty_reopen(struct tty_struct *tty)
 	tty->driver = driver; /* N.B. why do this every time?? */
 
 	mutex_lock(&tty->ldisc_mutex);
-	WARN_ON(!test_bit(TTY_LDISC, &tty->flags));
+	if (!test_bit(TTY_LDISC, &tty->flags)) {
+		printk("%s: !test_bit(TTY_LDISC, &tty->flags) dev=%s\n",
+			__func, tty->name);
+		WARN_ON(1);
+	}
 	mutex_unlock(&tty->ldisc_mutex);
 
 	return 0;
