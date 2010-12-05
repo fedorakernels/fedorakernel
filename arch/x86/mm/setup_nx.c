@@ -41,7 +41,7 @@ void __cpuinit x86_configure_nx(void)
 void __init x86_report_nx(void)
 {
 	if (!cpu_has_nx) {
-		if (disable_nx)
+		if (!disable_nx)
 			printk(KERN_INFO "Using x86 segment limits to approximate NX protection\n");
 		else
 
