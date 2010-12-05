@@ -46,10 +46,10 @@ out:
 }
 
 /**
- * ima_inode_alloc - allocate an iint associated with an inode
+ * __ima_inode_alloc - allocate an iint associated with an inode
  * @inode: pointer to the inode
  */
-int ima_inode_alloc(struct inode *inode)
+int __ima_inode_alloc(struct inode *inode)
 {
 	struct ima_iint_cache *iint = NULL;
 	int rc = 0;
@@ -107,12 +107,12 @@ void iint_rcu_free(struct rcu_head *rcu_head)
 }
 
 /**
- * ima_inode_free - called on security_inode_free
+ * __ima_inode_free - called on security_inode_free
  * @inode: pointer to the inode
  *
  * Free the integrity information(iint) associated with an inode.
  */
-void ima_inode_free(struct inode *inode)
+void __ima_inode_free(struct inode *inode)
 {
 	struct ima_iint_cache *iint;
 
@@ -139,6 +139,11 @@ static void init_once(void *foo)
 
 static int __init ima_iintcache_init(void)
 {
+	extern int ima_enabled;
+
+	if (!ima_enabled)
+		return 0;
+
 	iint_cache =
 	    kmem_cache_create("iint_cache", sizeof(struct ima_iint_cache), 0,
 			      SLAB_PANIC, init_once);

@@ -26,6 +26,7 @@
 #include "ima.h"
 
 int ima_initialized;
+int ima_enabled = 0;
 
 char *ima_hash = "sha1";
 static int __init hash_setup(char *str)
@@ -35,6 +36,14 @@ static int __init hash_setup(char *str)
 	return 1;
 }
 __setup("ima_hash=", hash_setup);
+
+static int __init ima_enable(char *str)
+{
+	if (strncmp(str, "on", 2) == 0)
+		ima_enabled = 1;
+	return 1;
+}
+__setup("ima=", ima_enable);
 
 struct ima_imbalance {
 	struct hlist_node node;
@@ -130,7 +139,7 @@ static void ima_inc_counts(struct ima_iint_cache *iint, fmode_t mode)
 }
 
 /*
- * ima_counts_get - increment file counts
+ * __ima_counts_get - increment file counts
  *
  * Maintain read/write counters for all files, but only
  * invalidate the PCR for measured files:
@@ -140,7 +149,7 @@ static void ima_inc_counts(struct ima_iint_cache *iint, fmode_t mode)
  * 	  could result in a file measurement error.
  *
  */
-void ima_counts_get(struct file *file)
+void __ima_counts_get(struct file *file)
 {
 	struct dentry *dentry = file->f_path.dentry;
 	struct inode *inode = dentry->d_inode;
@@ -204,13 +213,13 @@ static void ima_dec_counts(struct ima_iint_cache *iint, struct inode *inode,
 }
 
 /**
- * ima_file_free - called on __fput()
+ * __ima_file_free - called on __fput()
  * @file: pointer to file structure being freed
  *
  * Flag files that changed, based on i_version;
  * and decrement the iint readcount/writecount.
  */
-void ima_file_free(struct file *file)
+void __ima_file_free(struct file *file)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ima_iint_cache *iint;
@@ -255,7 +264,7 @@ out:
 }
 
 /**
- * ima_file_mmap - based on policy, collect/store measurement.
+ * __ima_file_mmap - based on policy, collect/store measurement.
  * @file: pointer to the file to be measured (May be NULL)
  * @prot: contains the protection that will be applied by the kernel.
  *
@@ -265,7 +274,7 @@ out:
  * Return 0 on success, an error code on failure.
  * (Based on the results of appraise_measurement().)
  */
-int ima_file_mmap(struct file *file, unsigned long prot)
+int __ima_file_mmap(struct file *file, unsigned long prot)
 {
 	int rc;
 
@@ -278,7 +287,7 @@ int ima_file_mmap(struct file *file, unsigned long prot)
 }
 
 /**
- * ima_bprm_check - based on policy, collect/store measurement.
+ * __ima_bprm_check - based on policy, collect/store measurement.
  * @bprm: contains the linux_binprm structure
  *
  * The OS protects against an executable file, already open for write,
@@ -290,7 +299,7 @@ int ima_file_mmap(struct file *file, unsigned long prot)
  * Return 0 on success, an error code on failure.
  * (Based on the results of appraise_measurement().)
  */
-int ima_bprm_check(struct linux_binprm *bprm)
+int __ima_bprm_check(struct linux_binprm *bprm)
 {
 	int rc;
 
@@ -300,7 +309,7 @@ int ima_bprm_check(struct linux_binprm *bprm)
 }
 
 /**
- * ima_path_check - based on policy, collect/store measurement.
+ * __ima_path_check - based on policy, collect/store measurement.
  * @file: pointer to the file to be measured
  * @mask: contains MAY_READ, MAY_WRITE or MAY_EXECUTE
  *
@@ -309,7 +318,7 @@ int ima_bprm_check(struct linux_binprm *bprm)
  * Always return 0 and audit dentry_open failures.
  * (Return code will be based upon measurement appraisal.)
  */
-int ima_file_check(struct file *file, int mask)
+int __ima_file_check(struct file *file, int mask)
 {
 	int rc;
 
@@ -318,11 +327,14 @@ int ima_file_check(struct file *file, int mask)
 				 FILE_CHECK);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(ima_file_check);
+EXPORT_SYMBOL_GPL(__ima_file_check);
 
 static int __init init_ima(void)
 {
 	int error;
+
+	if (!ima_enabled)
+		return 0;
 
 	error = ima_init();
 	ima_initialized = 1;
