@@ -208,9 +208,6 @@ int arch_bp_generic_fields(int x86_len, int x86_type,
 {
 	/* Len */
 	switch (x86_len) {
-	case X86_BREAKPOINT_LEN_X:
-		*gen_len = sizeof(long);
-		break;
 	case X86_BREAKPOINT_LEN_1:
 		*gen_len = HW_BREAKPOINT_LEN_1;
 		break;
@@ -233,6 +230,7 @@ int arch_bp_generic_fields(int x86_len, int x86_type,
 	switch (x86_type) {
 	case X86_BREAKPOINT_EXECUTE:
 		*gen_type = HW_BREAKPOINT_X;
+		*gen_len = sizeof(long);
 		break;
 	case X86_BREAKPOINT_WRITE:
 		*gen_type = HW_BREAKPOINT_W;
@@ -316,9 +314,6 @@ int arch_validate_hwbkpt_settings(struct perf_event *bp)
 	ret = -EINVAL;
 
 	switch (info->len) {
-	case X86_BREAKPOINT_LEN_X:
-		align = sizeof(long) -1;
-		break;
 	case X86_BREAKPOINT_LEN_1:
 		align = 0;
 		break;
