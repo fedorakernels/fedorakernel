@@ -323,11 +323,12 @@ acpi_ev_delete_gpe_handlers(struct acpi_gpe_xrupt_info *gpe_xrupt_info,
 								 ACPI_GPE_REGISTER_WIDTH)
 								+ j];
 
-			if (gpe_event_info->flags & ACPI_GPE_DISPATCH_HANDLER) {
+			if ((gpe_event_info->flags & ACPI_GPE_DISPATCH_MASK) ==
+			    ACPI_GPE_DISPATCH_HANDLER) {
 				ACPI_FREE(gpe_event_info->dispatch.handler);
 				gpe_event_info->dispatch.handler = NULL;
 				gpe_event_info->flags &=
-				    ~ACPI_GPE_DISPATCH_HANDLER;
+				    ~ACPI_GPE_DISPATCH_MASK;
 			}
 		}
 	}

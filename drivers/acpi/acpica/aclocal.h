@@ -406,15 +406,16 @@ struct acpi_predefined_data {
  *
  ****************************************************************************/
 
-/* Dispatch info for each GPE */
+/* Dispatch info for each GPE -- either a method or handler, cannot be both */
 
 struct acpi_handler_info {
 	acpi_event_handler address;	/* Address of handler, if any */
 	void *context;		/* Context to be passed to handler */
+	struct acpi_namespace_node *method_node;	/* Method node for this GPE level (saved) */
 	u8 orig_flags;		/* Original misc info about this GPE */
 };
 
-struct acpi_gpe_dispatch_info {
+union acpi_gpe_dispatch_info {
 	struct acpi_namespace_node *method_node;	/* Method node for this GPE level */
 	struct acpi_handler_info *handler;
 };
@@ -424,7 +425,7 @@ struct acpi_gpe_dispatch_info {
  * NOTE: Important to keep this struct as small as possible.
  */
 struct acpi_gpe_event_info {
-	struct acpi_gpe_dispatch_info dispatch;
+	union acpi_gpe_dispatch_info dispatch;	/* Either Method or Handler */
 	struct acpi_gpe_register_info *register_info;	/* Backpointer to register info */
 	u8 flags;		/* Misc info about this GPE */
 	u8 gpe_number;		/* This GPE */

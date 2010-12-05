@@ -1959,7 +1959,7 @@ static int acpi_gpe_irq_setup(struct smi_info *info)
 					  info->irq,
 					  ACPI_GPE_LEVEL_TRIGGERED,
 					  &ipmi_acpi_gpe,
-					  info, false);
+					  info);
 	if (status != AE_OK) {
 		dev_warn(info->dev, "%s unable to claim ACPI GPE %d,"
 			 " running polled\n", DEVICE_NAME, info->irq);

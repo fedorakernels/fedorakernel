@@ -746,7 +746,7 @@ static int ec_install_handlers(struct acpi_ec *ec)
 		return 0;
 	status = acpi_install_gpe_handler(NULL, ec->gpe,
 				  ACPI_GPE_EDGE_TRIGGERED,
-				  &acpi_ec_gpe_handler, ec, false);
+				  &acpi_ec_gpe_handler, ec);
 	if (ACPI_FAILURE(status))
 		return -ENODEV;
 

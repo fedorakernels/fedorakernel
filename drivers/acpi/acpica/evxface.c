@@ -662,8 +662,6 @@ ACPI_EXPORT_SYMBOL(acpi_remove_notify_handler)
  *                                edge- or level-triggered interrupt.
  *              Address         - Address of the handler
  *              Context         - Value passed to the handler on each GPE
- *		keep_method	- Whether the existing method should be
- *				  displaced or kept
  *
  * RETURN:      Status
  *
@@ -673,8 +671,7 @@ ACPI_EXPORT_SYMBOL(acpi_remove_notify_handler)
 acpi_status
 acpi_install_gpe_handler(acpi_handle gpe_device,
 			 u32 gpe_number,
-			 u32 type, acpi_event_handler address, void *context,
-			 bool keep_method)
+			 u32 type, acpi_event_handler address, void *context)
 {
 	struct acpi_gpe_event_info *gpe_event_info;
 	struct acpi_handler_info *handler;
@@ -714,7 +711,8 @@ acpi_install_gpe_handler(acpi_handle gpe_device,
 
 	/* Make sure that there isn't a handler there already */
 
-	if (gpe_event_info->flags & ACPI_GPE_DISPATCH_HANDLER) {
+	if ((gpe_event_info->flags & ACPI_GPE_DISPATCH_MASK) ==
+	    ACPI_GPE_DISPATCH_HANDLER) {
 		status = AE_ALREADY_EXISTS;
 		goto free_and_exit;
 	}
@@ -723,6 +721,7 @@ acpi_install_gpe_handler(acpi_handle gpe_device,
 
 	handler->address = address;
 	handler->context = context;
+	handler->method_node = gpe_event_info->dispatch.method_node;
 	handler->orig_flags = gpe_event_info->flags &
 			(ACPI_GPE_XRUPT_TYPE_MASK | ACPI_GPE_DISPATCH_MASK);
 
@@ -734,17 +733,17 @@ acpi_install_gpe_handler(acpi_handle gpe_device,
 	 */
 
 	if ((handler->orig_flags & ACPI_GPE_DISPATCH_METHOD)
-	    && !(gpe_event_info->flags & ACPI_GPE_CAN_WAKE) && !keep_method)
+	    && !(gpe_event_info->flags & ACPI_GPE_CAN_WAKE))
 		(void)acpi_raw_disable_gpe(gpe_event_info);
 
 	/* Install the handler */
 
 	gpe_event_info->dispatch.handler = handler;
 
-	if (!keep_method)
-		gpe_event_info->flags &=
-			~(ACPI_GPE_XRUPT_TYPE_MASK | ACPI_GPE_DISPATCH_MASK);
+	/* Setup up dispatch flags to indicate handler (vs. method) */
 
+	gpe_event_info->flags &=
+	    ~(ACPI_GPE_XRUPT_TYPE_MASK | ACPI_GPE_DISPATCH_MASK);
 	gpe_event_info->flags |= (u8) (type | ACPI_GPE_DISPATCH_HANDLER);
 
 	acpi_os_release_lock(acpi_gbl_gpe_lock, flags);
@@ -813,7 +812,8 @@ acpi_remove_gpe_handler(acpi_handle gpe_device,
 
 	/* Make sure that a handler is indeed installed */
 
-	if (!(gpe_event_info->flags & ACPI_GPE_DISPATCH_HANDLER)) {
+	if ((gpe_event_info->flags & ACPI_GPE_DISPATCH_MASK) !=
+	    ACPI_GPE_DISPATCH_HANDLER) {
 		status = AE_NOT_EXIST;
 		goto unlock_and_exit;
 	}
@@ -829,8 +829,9 @@ acpi_remove_gpe_handler(acpi_handle gpe_device,
 
 	handler = gpe_event_info->dispatch.handler;
 
-	/* Set dispatch flags */
+	/* Restore Method node (if any), set dispatch flags */
 
+	gpe_event_info->dispatch.method_node = handler->method_node;
 	gpe_event_info->flags &=
 		~(ACPI_GPE_XRUPT_TYPE_MASK | ACPI_GPE_DISPATCH_MASK);
 	gpe_event_info->flags |= handler->orig_flags;
