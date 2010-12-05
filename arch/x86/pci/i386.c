@@ -65,8 +65,14 @@ pcibios_align_resource(void *data, const struct resource *res,
 			resource_size_t size, resource_size_t align)
 {
 	struct pci_dev *dev = data;
-	resource_size_t start = round_down(res->end - size + 1, align);
+	resource_size_t start, end = res->end;
 
+	/* Make sure we don't allocate from the last 1M before 4G */
+	if (res->flags & IORESOURCE_MEM) {
+		if (end >= BIOS_ROM_BASE && end < BIOS_ROM_END)
+			end = BIOS_ROM_BASE - 1;
+	}
+	start = round_down(end - size + 1, align);
 	if (res->flags & IORESOURCE_IO) {
 
 		/*
@@ -80,6 +86,8 @@ pcibios_align_resource(void *data, const struct resource *res,
 	} else if (res->flags & IORESOURCE_MEM) {
 		if (start < BIOS_END)
 			start = res->end;	/* fail; no space */
+		if (start >= BIOS_ROM_BASE && start < BIOS_ROM_END)
+			start = ALIGN(BIOS_ROM_END, align);
 	}
 	return start;
 }
