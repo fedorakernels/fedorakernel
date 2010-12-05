@@ -1521,7 +1521,7 @@ int do_notify_parent(struct task_struct *tsk, int sig)
 	return ret;
 }
 
-void do_notify_parent_cldstop(struct task_struct *tsk, int why)
+static void do_notify_parent_cldstop(struct task_struct *tsk, int why)
 {
 	struct siginfo info;
 	unsigned long flags;
@@ -1791,7 +1791,7 @@ static int do_signal_stop(int signr)
 static int ptrace_signal(int signr, siginfo_t *info,
 			 struct pt_regs *regs, void *cookie)
 {
-	if (!(task_ptrace(current) & PT_PTRACED))
+	if (!task_ptrace(current))
 		return signr;
 
 	ptrace_signal_deliver(regs, cookie);
