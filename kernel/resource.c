@@ -40,6 +40,23 @@ EXPORT_SYMBOL(iomem_resource);
 
 static DEFINE_RWLOCK(resource_lock);
 
+/*
+ * By default, we allocate free space bottom-up.  The architecture can request
+ * top-down by clearing this flag.  The user can override the architecture's
+ * choice with the "resource_alloc_from_bottom" kernel boot option, but that
+ * should only be a debugging tool.
+ */
+int resource_alloc_from_bottom = 1;
+
+static __init int setup_alloc_from_bottom(char *s)
+{
+	printk(KERN_INFO
+	       "resource: allocating from bottom-up; please report a bug\n");
+	resource_alloc_from_bottom = 1;
+	return 0;
+}
+early_param("resource_alloc_from_bottom", setup_alloc_from_bottom);
+
 static void *r_next(struct seq_file *m, void *v, loff_t *pos)
 {
 	struct resource *p = v;
@@ -373,27 +390,30 @@ static struct resource *find_sibling_prev(struct resource *root, struct resource
 
 /*
  * Find empty slot in the resource tree given range and alignment.
+ * This version allocates from the end of the root resource first.
  */
-static int find_resource(struct resource *root, struct resource *new,
-			 resource_size_t size, resource_size_t min,
-			 resource_size_t max, resource_size_t align,
-			 resource_size_t (*alignf)(void *,
+static int find_resource_from_top(struct resource *root, struct resource *new,
+				  resource_size_t size, resource_size_t min,
+				  resource_size_t max, resource_size_t align,
+				  resource_size_t (*alignf)(void *,
 						   const struct resource *,
 						   resource_size_t,
 						   resource_size_t),
-			 void *alignf_data)
+				  void *alignf_data)
 {
 	struct resource *this;
 	struct resource tmp = *new;
 	resource_size_t start;
 
+	tmp.start = root->end;
 	tmp.end = root->end;
 
 	this = find_sibling_prev(root, NULL);
 	for (;;) {
-		if (this)
-			tmp.start = this->end + 1;
-		else
+		if (this) {
+			if (this->end < root->end)
+				tmp.start = this->end + 1;
+		} else
 			tmp.start = root->start;
 		if (tmp.start < min)
 			tmp.start = min;
@@ -416,6 +436,62 @@ static int find_resource(struct resource *root, struct resource *new,
 			break;
 		tmp.end = this->start - 1;
 		this = find_sibling_prev(root, this);
+	}
+	return -EBUSY;
+}
+
+/*
+ * Find empty slot in the resource tree given range and alignment.
+ * This version allocates from the beginning of the root resource first.
+ */
+static int find_resource(struct resource *root, struct resource *new,
+			 resource_size_t size, resource_size_t min,
+			 resource_size_t max, resource_size_t align,
+			 resource_size_t (*alignf)(void *,
+						   const struct resource *,
+						   resource_size_t,
+						   resource_size_t),
+			 void *alignf_data)
+{
+	struct resource *this = root->child;
+	struct resource tmp = *new;
+	resource_size_t start;
+
+	tmp.start = root->start;
+	/*
+	 * Skip past an allocated resource that starts at 0, since the assignment
+	 * of this->start - 1 to tmp->end below would cause an underflow.
+	 */
+	if (this && this->start == 0) {
+		tmp.start = this->end + 1;
+		this = this->sibling;
+	}
+	for(;;) {
+		if (this)
+			tmp.end = this->start - 1;
+		else
+			tmp.end = root->end;
+		if (tmp.start < min)
+			tmp.start = min;
+		if (tmp.end > max)
+			tmp.end = max;
+		tmp.start = ALIGN(tmp.start, align);
+		if (alignf) {
+			start = alignf(alignf_data, &tmp, size, align);
+			if (tmp.start <= start && start <= tmp.end)
+				tmp.start = start;
+			else
+				tmp.start = tmp.end;
+		}
+		if (tmp.start < tmp.end && tmp.end - tmp.start >= size - 1) {
+			new->start = tmp.start;
+			new->end = tmp.start + size - 1;
+			return 0;
+		}
+		if (!this)
+			break;
+		tmp.start = this->end + 1;
+		this = this->sibling;
 	}
 	return -EBUSY;
 }
@@ -443,7 +519,10 @@ int allocate_resource(struct resource *root, struct resource *new,
 	int err;
 
 	write_lock(&resource_lock);
-	err = find_resource(root, new, size, min, max, align, alignf, alignf_data);
+	if (resource_alloc_from_bottom)
+		err = find_resource(root, new, size, min, max, align, alignf, alignf_data);
+	else
+		err = find_resource_from_top(root, new, size, min, max, align, alignf, alignf_data);
 	if (err >= 0 && __request_resource(root, new))
 		err = -EBUSY;
 	write_unlock(&resource_lock);
