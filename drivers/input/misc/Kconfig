@@ -199,6 +199,19 @@ config INPUT_KEYSPAN_REMOTE
 	  To compile this driver as a module, choose M here: the module will
 	  be called keyspan_remote.
 
+config INPUT_APPLEIR
+	tristate "Apple infrared receiver (built in)"
+	depends on USB_ARCH_HAS_HCD
+	select USB
+	help
+	  Say Y here if you want to use a Apple infrared remote control. All
+	  the Apple computers from 2005 onwards include such a port, except
+	  the unibody Macbook (2009), and Mac Pros. This receiver is also
+	  used in the Apple TV set-top box.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called appleir.
+
 config INPUT_POWERMATE
 	tristate "Griffin PowerMate and Contour Jog support"
 	depends on USB_ARCH_HAS_HCD
