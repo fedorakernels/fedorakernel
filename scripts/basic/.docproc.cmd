@@ -24,6 +24,7 @@ deps_scripts/basic/docproc := \
   /usr/include/endian.h \
   /usr/include/bits/endian.h \
   /usr/include/bits/byteswap.h \
+  /usr/include/xlocale.h \
   /usr/include/sys/types.h \
   /usr/include/time.h \
   /usr/include/sys/select.h \
@@ -34,7 +35,6 @@ deps_scripts/basic/docproc := \
   /usr/include/bits/pthreadtypes.h \
   /usr/include/alloca.h \
   /usr/include/string.h \
-  /usr/include/xlocale.h \
   /usr/include/bits/string.h \
   /usr/include/bits/string2.h \
   /usr/include/ctype.h \
@@ -50,6 +50,13 @@ deps_scripts/basic/docproc := \
   /usr/include/bits/local_lim.h \
   /usr/include/linux/limits.h \
   /usr/include/bits/posix2_lim.h \
+  /usr/include/bits/xopen_lim.h \
+  /usr/include/errno.h \
+  /usr/include/bits/errno.h \
+  /usr/include/linux/errno.h \
+  /usr/include/asm/errno.h \
+  /usr/include/asm-generic/errno.h \
+  /usr/include/asm-generic/errno-base.h \
   /usr/include/sys/wait.h \
   /usr/include/signal.h \
   /usr/include/bits/signum.h \
