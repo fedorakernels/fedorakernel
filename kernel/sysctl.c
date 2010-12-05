@@ -993,6 +993,13 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= proc_dointvec,
 	},
 	{
+		.procname	= "would_have_oomkilled",
+		.data		= &sysctl_would_have_oomkilled,
+		.maxlen		= sizeof(sysctl_would_have_oomkilled),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
 		.procname	= "overcommit_ratio",
 		.data		= &sysctl_overcommit_ratio,
 		.maxlen		= sizeof(sysctl_overcommit_ratio),

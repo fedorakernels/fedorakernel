@@ -4514,7 +4514,6 @@ void intel_release_load_detect_pipe(struct intel_encoder *intel_encoder,
 				    struct drm_connector *connector, int dpms_mode)
 {
 	struct drm_encoder *encoder = &intel_encoder->enc;
-	struct drm_device *dev = encoder->dev;
 	struct drm_crtc *crtc = encoder->crtc;
 	struct drm_encoder_helper_funcs *encoder_funcs = encoder->helper_private;
 	struct drm_crtc_helper_funcs *crtc_funcs = crtc->helper_private;
@@ -4524,7 +4523,6 @@ void intel_release_load_detect_pipe(struct intel_encoder *intel_encoder,
 		connector->encoder = NULL;
 		intel_encoder->load_detect_temp = false;
 		crtc->enabled = drm_helper_crtc_in_use(crtc);
-		drm_helper_disable_unused_functions(dev);
 	}
 
 	/* Switch crtc and encoder back off if necessary */

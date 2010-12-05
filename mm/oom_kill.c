@@ -35,6 +35,7 @@
 int sysctl_panic_on_oom;
 int sysctl_oom_kill_allocating_task;
 int sysctl_oom_dump_tasks = 1;
+int sysctl_would_have_oomkilled;
 static DEFINE_SPINLOCK(zone_scan_lock);
 
 #ifdef CONFIG_NUMA
@@ -452,6 +453,13 @@ static int oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 	}
 
 	task_lock(p);
+	if (sysctl_would_have_oomkilled) {
+		printk(KERN_ERR "%s: would have killed process %d (%s), but continuing instead...\n",
+			__func__, task_pid_nr(p), p->comm);
+		task_unlock(p);
+		return 0;
+	}
+
 	pr_err("%s: Kill process %d (%s) score %d or sacrifice child\n",
 		message, task_pid_nr(p), p->comm, points);
 	task_unlock(p);
