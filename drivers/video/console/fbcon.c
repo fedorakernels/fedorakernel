@@ -3510,7 +3510,7 @@ static void fbcon_exit(void)
 	softback_buf = 0UL;
 
 	for (i = 0; i < FB_MAX; i++) {
-		int pending;
+		int pending = 0;
 
 		mapped = 0;
 		info = registered_fb[i];
@@ -3518,7 +3518,8 @@ static void fbcon_exit(void)
 		if (info == NULL)
 			continue;
 
-		pending = cancel_work_sync(&info->queue);
+		if (info->queue.func)
+			pending = cancel_work_sync(&info->queue);
 		DPRINTK("fbcon: %s pending work\n", (pending ? "canceled" :
 			"no"));
 
