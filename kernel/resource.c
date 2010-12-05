@@ -358,6 +358,20 @@ int __weak page_is_ram(unsigned long pfn)
 }
 
 /*
+ * Find the resource before "child" in the sibling list of "root" children.
+ */
+static struct resource *find_sibling_prev(struct resource *root, struct resource *child)
+{
+	struct resource *this;
+
+	for (this = root->child; this; this = this->sibling)
+		if (this->sibling == child)
+			return this;
+
+	return NULL;
+}
+
+/*
  * Find empty slot in the resource tree given range and alignment.
  */
 static int find_resource(struct resource *root, struct resource *new,
@@ -369,39 +383,39 @@ static int find_resource(struct resource *root, struct resource *new,
 						   resource_size_t),
 			 void *alignf_data)
 {
-	struct resource *this = root->child;
+	struct resource *this;
 	struct resource tmp = *new;
+	resource_size_t start;
 
-	tmp.start = root->start;
-	/*
-	 * Skip past an allocated resource that starts at 0, since the assignment
-	 * of this->start - 1 to tmp->end below would cause an underflow.
-	 */
-	if (this && this->start == 0) {
-		tmp.start = this->end + 1;
-		this = this->sibling;
-	}
-	for(;;) {
+	tmp.end = root->end;
+
+	this = find_sibling_prev(root, NULL);
+	for (;;) {
 		if (this)
-			tmp.end = this->start - 1;
+			tmp.start = this->end + 1;
 		else
-			tmp.end = root->end;
+			tmp.start = root->start;
 		if (tmp.start < min)
 			tmp.start = min;
 		if (tmp.end > max)
 			tmp.end = max;
 		tmp.start = ALIGN(tmp.start, align);
-		if (alignf)
-			tmp.start = alignf(alignf_data, &tmp, size, align);
+		if (alignf) {
+			start = alignf(alignf_data, &tmp, size, align);
+			if (tmp.start <= start && start <= tmp.end)
+				tmp.start = start;
+			else
+				tmp.start = tmp.end;
+		}
 		if (tmp.start < tmp.end && tmp.end - tmp.start >= size - 1) {
 			new->start = tmp.start;
 			new->end = tmp.start + size - 1;
 			return 0;
 		}
-		if (!this)
+		if (!this || this->start == root->start)
 			break;
-		tmp.start = this->end + 1;
-		this = this->sibling;
+		tmp.end = this->start - 1;
+		this = find_sibling_prev(root, this);
 	}
 	return -EBUSY;
 }
