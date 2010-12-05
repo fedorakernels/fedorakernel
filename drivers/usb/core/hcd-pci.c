@@ -248,8 +248,10 @@ int usb_hcd_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		goto err4;
 	set_hs_companion(dev, hcd);
 
-	if (pci_dev_run_wake(dev))
+	if (pci_dev_run_wake(dev)) {
 		pm_runtime_put_noidle(&dev->dev);
+		pm_runtime_allow(&dev->dev);
+	}
 	return retval;
 
  err4:

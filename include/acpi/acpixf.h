@@ -253,7 +253,8 @@ acpi_remove_address_space_handler(acpi_handle device,
 acpi_status
 acpi_install_gpe_handler(acpi_handle gpe_device,
 			 u32 gpe_number,
-			 u32 type, acpi_event_handler address, void *context);
+			 u32 type, acpi_event_handler address, void *context,
+			 bool keep_method);
 
 acpi_status
 acpi_remove_gpe_handler(acpi_handle gpe_device,

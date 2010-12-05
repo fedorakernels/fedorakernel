@@ -387,7 +387,7 @@ struct acpi_pci_root *acpi_pci_find_root(acpi_handle handle);
 #define DEVICE_ACPI_HANDLE(dev) ((acpi_handle)((dev)->archdata.acpi_handle))
 
 int acpi_enable_wakeup_device_power(struct acpi_device *dev, int state);
-int acpi_disable_wakeup_device_power(struct acpi_device *dev);
+int acpi_disable_wakeup_device_power(struct acpi_device *dev, int state);
 
 #ifdef CONFIG_PM_SLEEP
 int acpi_pm_device_sleep_state(struct device *, int *);

@@ -474,9 +474,7 @@ static void ACPI_SYSTEM_XFACE acpi_ev_asynch_execute_gpe_method(void *context)
 	 * Must check for control method type dispatch one more time to avoid a
 	 * race with ev_gpe_install_handler
 	 */
-	if ((local_gpe_event_info.flags & ACPI_GPE_DISPATCH_MASK) ==
-	    ACPI_GPE_DISPATCH_METHOD) {
-
+	if (local_gpe_event_info.flags & ACPI_GPE_DISPATCH_METHOD) {
 		/* Allocate the evaluation information block */
 
 		info = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_evaluate_info));
@@ -575,41 +573,15 @@ acpi_ev_gpe_dispatch(struct acpi_gpe_event_info *gpe_event_info, u32 gpe_number)
 	}
 
 	/*
-	 * Dispatch the GPE to either an installed handler, or the control method
-	 * associated with this GPE (_Lxx or _Exx). If a handler exists, we invoke
-	 * it and do not attempt to run the method. If there is neither a handler
-	 * nor a method, we disable this GPE to prevent further such pointless
-	 * events from firing.
+	 * Dispatch the GPE to either any installed handler or control
+	 * method associated with this GPE (_Lxx or _Exx). We invoke
+	 * the method first in case it has side effects that would be
+	 * interfered with if the handler has already altered hardware
+	 * state. If there is neither a handler nor a method, we
+	 * disable this GPE to prevent further such pointless events
+	 * from firing.
 	 */
-	switch (gpe_event_info->flags & ACPI_GPE_DISPATCH_MASK) {
-	case ACPI_GPE_DISPATCH_HANDLER:
-
-		/*
-		 * Invoke the installed handler (at interrupt level)
-		 * Ignore return status for now.
-		 * TBD: leave GPE disabled on error?
-		 */
-		(void)gpe_event_info->dispatch.handler->address(gpe_event_info->
-								dispatch.
-								handler->
-								context);
-
-		/* It is now safe to clear level-triggered events. */
-
-		if ((gpe_event_info->flags & ACPI_GPE_XRUPT_TYPE_MASK) ==
-		    ACPI_GPE_LEVEL_TRIGGERED) {
-			status = acpi_hw_clear_gpe(gpe_event_info);
-			if (ACPI_FAILURE(status)) {
-				ACPI_EXCEPTION((AE_INFO, status,
-					"Unable to clear GPE[0x%2X]",
-						gpe_number));
-				return_UINT32(ACPI_INTERRUPT_NOT_HANDLED);
-			}
-		}
-		break;
-
-	case ACPI_GPE_DISPATCH_METHOD:
-
+	if (gpe_event_info->flags & ACPI_GPE_DISPATCH_METHOD) {
 		/*
 		 * Disable the GPE, so it doesn't keep firing before the method has a
 		 * chance to run (it runs asynchronously with interrupts enabled).
@@ -634,10 +606,34 @@ acpi_ev_gpe_dispatch(struct acpi_gpe_event_info *gpe_event_info, u32 gpe_number)
 					"Unable to queue handler for GPE[0x%2X] - event disabled",
 					gpe_number));
 		}
-		break;
+	}
 
-	default:
+	if (gpe_event_info->flags & ACPI_GPE_DISPATCH_HANDLER) {
+		/*
+		 * Invoke the installed handler (at interrupt level)
+		 * Ignore return status for now.
+		 * TBD: leave GPE disabled on error?
+		 */
+		(void)gpe_event_info->dispatch.handler->address(gpe_event_info->
+								dispatch.
+								handler->
+								context);
 
+		/* It is now safe to clear level-triggered events. */
+
+		if ((gpe_event_info->flags & ACPI_GPE_XRUPT_TYPE_MASK) ==
+		    ACPI_GPE_LEVEL_TRIGGERED) {
+			status = acpi_hw_clear_gpe(gpe_event_info);
+			if (ACPI_FAILURE(status)) {
+				ACPI_EXCEPTION((AE_INFO, status,
+					"Unable to clear GPE[0x%2X]",
+						gpe_number));
+				return_UINT32(ACPI_INTERRUPT_NOT_HANDLED);
+			}
+		}
+	}
+
+	if (!(gpe_event_info->flags & ACPI_GPE_DISPATCH_MASK)) {
 		/*
 		 * No handler or method to run!
 		 * 03/2010: This case should no longer be possible. We will not allow
@@ -658,7 +654,6 @@ acpi_ev_gpe_dispatch(struct acpi_gpe_event_info *gpe_event_info, u32 gpe_number)
 					gpe_number));
 			return_UINT32(ACPI_INTERRUPT_NOT_HANDLED);
 		}
-		break;
 	}
 
 	return_UINT32(ACPI_INTERRUPT_HANDLED);

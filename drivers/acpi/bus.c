@@ -329,7 +329,8 @@ int acpi_bus_set_power(acpi_handle handle, int state)
 				goto end;
 			}
 		}
-		if (device->power.flags.power_resources) {
+		if (device->power.flags.power_resources &&
+		    !device->wakeup.run_wake_count) {
 			result = acpi_power_transition(device, state);
 			if (result)
 				goto end;

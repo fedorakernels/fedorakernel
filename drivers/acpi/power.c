@@ -394,7 +394,7 @@ int acpi_enable_wakeup_device_power(struct acpi_device *dev, int sleep_state)
  *    State Wake) for the device, if present
  * 2. Shutdown down the power resources
  */
-int acpi_disable_wakeup_device_power(struct acpi_device *dev)
+int acpi_disable_wakeup_device_power(struct acpi_device *dev, int sleep_state)
 {
 	int i, err = 0;
 
@@ -415,6 +415,9 @@ int acpi_disable_wakeup_device_power(struct acpi_device *dev)
 
 	err = acpi_device_sleep_wake(dev, 0, 0, 0);
 	if (err)
+		goto out;
+
+	if (sleep_state == ACPI_STATE_S0)
 		goto out;
 
 	/* Close power resource */

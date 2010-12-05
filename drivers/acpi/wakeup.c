@@ -71,7 +71,7 @@ void acpi_disable_wakeup_devices(u8 sleep_state)
 				ACPI_GPE_DISABLE);
 
 		if (dev->wakeup.state.enabled)
-			acpi_disable_wakeup_device_power(dev);
+			acpi_disable_wakeup_device_power(dev, sleep_state);
 	}
 }
 
