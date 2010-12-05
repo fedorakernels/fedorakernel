@@ -294,7 +294,7 @@ static int appleir_probe(struct usb_interface *intf,
 	if (!appleir)
 		goto allocfail;
 
-	appleir->data = usb_buffer_alloc(dev, URB_SIZE, GFP_KERNEL,
+	appleir->data = usb_alloc_coherent(dev, URB_SIZE, GFP_KERNEL,
 					 &appleir->dma_buf);
 	if (!appleir->data)
 		goto usbfail;
@@ -361,7 +361,7 @@ urbfail:
 	usb_free_urb(appleir->urb);
 
 usbfail:
-	usb_buffer_free(dev, URB_SIZE, appleir->data,
+	usb_free_coherent(dev, URB_SIZE, appleir->data,
 			appleir->dma_buf);
 
 allocfail:
@@ -377,7 +377,7 @@ static void appleir_disconnect(struct usb_interface *intf)
 	usb_set_intfdata(intf, NULL);
 	input_unregister_device(appleir->input_dev);
 	usb_free_urb(appleir->urb);
-	usb_buffer_free(interface_to_usbdev(intf), URB_SIZE,
+	usb_free_coherent(interface_to_usbdev(intf), URB_SIZE,
 			appleir->data, appleir->dma_buf);
 	kfree(appleir);
 }
