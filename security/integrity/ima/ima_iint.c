@@ -46,13 +46,16 @@ out:
 }
 
 /**
- * __ima_inode_alloc - allocate an iint associated with an inode
+ * ima_inode_alloc - allocate an iint associated with an inode
  * @inode: pointer to the inode
  */
-int __ima_inode_alloc(struct inode *inode)
+int ima_inode_alloc(struct inode *inode)
 {
 	struct ima_iint_cache *iint = NULL;
 	int rc = 0;
+
+	if (!ima_enabled)
+		return 0;
 
 	iint = kmem_cache_alloc(iint_cache, GFP_NOFS);
 	if (!iint)
@@ -107,14 +110,17 @@ void iint_rcu_free(struct rcu_head *rcu_head)
 }
 
 /**
- * __ima_inode_free - called on security_inode_free
+ * ima_inode_free - called on security_inode_free
  * @inode: pointer to the inode
  *
  * Free the integrity information(iint) associated with an inode.
  */
-void __ima_inode_free(struct inode *inode)
+void ima_inode_free(struct inode *inode)
 {
 	struct ima_iint_cache *iint;
+
+	if (!ima_enabled)
+		return;
 
 	spin_lock(&ima_iint_lock);
 	iint = radix_tree_delete(&ima_iint_store, (unsigned long)inode);
@@ -139,8 +145,6 @@ static void init_once(void *foo)
 
 static int __init ima_iintcache_init(void)
 {
-	extern int ima_enabled;
-
 	if (!ima_enabled)
 		return 0;
 

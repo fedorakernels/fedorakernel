@@ -866,6 +866,7 @@ int xhci_setup_addressable_virt_dev(struct xhci_hcd *xhci, struct usb_device *ud
 			top_dev = top_dev->parent)
 		/* Found device below root hub */;
 	slot_ctx->dev_info2 |= (u32) ROOT_HUB_PORT(top_dev->portnum);
+	dev->port = top_dev->portnum;
 	xhci_dbg(xhci, "Set root hub portnum to %d\n", top_dev->portnum);
 
 	/* Is this a LS/FS device under a HS hub? */
@@ -1443,6 +1444,7 @@ void xhci_mem_cleanup(struct xhci_hcd *xhci)
 	scratchpad_free(xhci);
 	xhci->page_size = 0;
 	xhci->page_shift = 0;
+	xhci->bus_suspended = 0;
 }
 
 static int xhci_test_trb_in_td(struct xhci_hcd *xhci,
@@ -1801,6 +1803,8 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	init_completion(&xhci->addr_dev);
 	for (i = 0; i < MAX_HC_SLOTS; ++i)
 		xhci->devs[i] = NULL;
+	for (i = 0; i < MAX_HC_PORTS; ++i)
+		xhci->resume_done[i] = 0;
 
 	if (scratchpad_alloc(xhci, flags))
 		goto fail;

@@ -26,7 +26,7 @@
 #include "ima.h"
 
 int ima_initialized;
-int ima_enabled = 0;
+int ima_enabled;
 
 char *ima_hash = "sha1";
 static int __init hash_setup(char *str)
@@ -139,7 +139,7 @@ static void ima_inc_counts(struct ima_iint_cache *iint, fmode_t mode)
 }
 
 /*
- * __ima_counts_get - increment file counts
+ * ima_counts_get - increment file counts
  *
  * Maintain read/write counters for all files, but only
  * invalidate the PCR for measured files:
@@ -149,7 +149,7 @@ static void ima_inc_counts(struct ima_iint_cache *iint, fmode_t mode)
  * 	  could result in a file measurement error.
  *
  */
-void __ima_counts_get(struct file *file)
+void ima_counts_get(struct file *file)
 {
 	struct dentry *dentry = file->f_path.dentry;
 	struct inode *inode = dentry->d_inode;
@@ -157,7 +157,7 @@ void __ima_counts_get(struct file *file)
 	struct ima_iint_cache *iint;
 	int rc;
 
-	if (!iint_initialized || !S_ISREG(inode->i_mode))
+	if (!ima_enabled || !iint_initialized || !S_ISREG(inode->i_mode))
 		return;
 	iint = ima_iint_find_get(inode);
 	if (!iint)
@@ -213,18 +213,18 @@ static void ima_dec_counts(struct ima_iint_cache *iint, struct inode *inode,
 }
 
 /**
- * __ima_file_free - called on __fput()
+ * ima_file_free - called on __fput()
  * @file: pointer to file structure being freed
  *
  * Flag files that changed, based on i_version;
  * and decrement the iint readcount/writecount.
  */
-void __ima_file_free(struct file *file)
+void ima_file_free(struct file *file)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ima_iint_cache *iint;
 
-	if (!iint_initialized || !S_ISREG(inode->i_mode))
+	if (!ima_enabled || !iint_initialized || !S_ISREG(inode->i_mode))
 		return;
 	iint = ima_iint_find_get(inode);
 	if (!iint)
@@ -264,7 +264,7 @@ out:
 }
 
 /**
- * __ima_file_mmap - based on policy, collect/store measurement.
+ * ima_file_mmap - based on policy, collect/store measurement.
  * @file: pointer to the file to be measured (May be NULL)
  * @prot: contains the protection that will be applied by the kernel.
  *
@@ -274,11 +274,11 @@ out:
  * Return 0 on success, an error code on failure.
  * (Based on the results of appraise_measurement().)
  */
-int __ima_file_mmap(struct file *file, unsigned long prot)
+int ima_file_mmap(struct file *file, unsigned long prot)
 {
 	int rc;
 
-	if (!file)
+	if (!ima_enabled || !file)
 		return 0;
 	if (prot & PROT_EXEC)
 		rc = process_measurement(file, file->f_dentry->d_name.name,
@@ -287,7 +287,7 @@ int __ima_file_mmap(struct file *file, unsigned long prot)
 }
 
 /**
- * __ima_bprm_check - based on policy, collect/store measurement.
+ * ima_bprm_check - based on policy, collect/store measurement.
  * @bprm: contains the linux_binprm structure
  *
  * The OS protects against an executable file, already open for write,
@@ -299,9 +299,12 @@ int __ima_file_mmap(struct file *file, unsigned long prot)
  * Return 0 on success, an error code on failure.
  * (Based on the results of appraise_measurement().)
  */
-int __ima_bprm_check(struct linux_binprm *bprm)
+int ima_bprm_check(struct linux_binprm *bprm)
 {
 	int rc;
+
+	if (!ima_enabled)
+		return 0;
 
 	rc = process_measurement(bprm->file, bprm->filename,
 				 MAY_EXEC, BPRM_CHECK);
@@ -309,7 +312,7 @@ int __ima_bprm_check(struct linux_binprm *bprm)
 }
 
 /**
- * __ima_path_check - based on policy, collect/store measurement.
+ * ima_path_check - based on policy, collect/store measurement.
  * @file: pointer to the file to be measured
  * @mask: contains MAY_READ, MAY_WRITE or MAY_EXECUTE
  *
@@ -318,16 +321,19 @@ int __ima_bprm_check(struct linux_binprm *bprm)
  * Always return 0 and audit dentry_open failures.
  * (Return code will be based upon measurement appraisal.)
  */
-int __ima_file_check(struct file *file, int mask)
+int ima_file_check(struct file *file, int mask)
 {
 	int rc;
+
+	if (!ima_enabled)
+		return 0;
 
 	rc = process_measurement(file, file->f_dentry->d_name.name,
 				 mask & (MAY_READ | MAY_WRITE | MAY_EXEC),
 				 FILE_CHECK);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(__ima_file_check);
+EXPORT_SYMBOL_GPL(ima_file_check);
 
 static int __init init_ima(void)
 {
