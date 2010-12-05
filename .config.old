@@ -4094,7 +4094,7 @@ CONFIG_THERMAL_HWMON=y
 CONFIG_OPTIMIZE_INLINING=y
 
 # FIXME: This should be x86/ia64 only
-# CONFIG_HP_ILO is not set
+CONFIG_HP_ILO=m
 
 # CONFIG_GPIOLIB is not set
 
