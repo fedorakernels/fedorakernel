@@ -562,9 +562,10 @@ static void acpi_battery_quirks(struct acpi_battery *battery)
 	}
 }
 
-static int acpi_battery_update(struct acpi_battery *battery)
+static int acpi_battery_update(struct acpi_battery *battery, bool get_info)
 {
 	int result, old_present = acpi_battery_present(battery);
+	int old_power_unit = battery->power_unit;
 	result = acpi_battery_get_status(battery);
 	if (result)
 		return result;
@@ -587,6 +588,16 @@ static int acpi_battery_update(struct acpi_battery *battery)
 	if (!battery->bat.dev)
 		sysfs_add_battery(battery);
 #endif
+	if (get_info) {
+		acpi_battery_get_info(battery);
+#ifdef CONFIG_ACPI_SYSFS_POWER
+		if (old_power_unit != battery->power_unit) {
+			/* The battery has changed its reporting units */
+			sysfs_remove_battery(battery);
+			sysfs_add_battery(battery);
+		}
+#endif
+	}
 	return acpi_battery_get_state(battery);
 }
 
@@ -762,7 +773,7 @@ static print_func acpi_print_funcs[ACPI_BATTERY_NUMFILES] = {
 static int acpi_battery_read(int fid, struct seq_file *seq)
 {
 	struct acpi_battery *battery = seq->private;
-	int result = acpi_battery_update(battery);
+	int result = acpi_battery_update(battery, false);
 	return acpi_print_funcs[fid](seq, result);
 }
 
@@ -877,7 +888,8 @@ static void acpi_battery_notify(struct acpi_device *device, u32 event)
 #ifdef CONFIG_ACPI_SYSFS_POWER
 	old = battery->bat.dev;
 #endif
-	acpi_battery_update(battery);
+	acpi_battery_update(battery, (event == ACPI_BATTERY_NOTIFY_INFO ? true
+				      : false));
 	acpi_bus_generate_proc_event(device, event,
 				     acpi_battery_present(battery));
 	acpi_bus_generate_netlink_event(device->pnp.device_class,
@@ -908,7 +920,7 @@ static int acpi_battery_add(struct acpi_device *device)
 	if (ACPI_SUCCESS(acpi_get_handle(battery->device->handle,
 			"_BIX", &handle)))
 		set_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags);
-	acpi_battery_update(battery);
+	acpi_battery_update(battery, false);
 #ifdef CONFIG_ACPI_PROCFS_POWER
 	result = acpi_battery_add_fs(device);
 #endif
@@ -951,7 +963,7 @@ static int acpi_battery_resume(struct acpi_device *device)
 		return -EINVAL;
 	battery = acpi_driver_data(device);
 	battery->update_time = 0;
-	acpi_battery_update(battery);
+	acpi_battery_update(battery, true);
 	return 0;
 }
 
