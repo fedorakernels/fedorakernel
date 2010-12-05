@@ -392,16 +392,7 @@ acpi_ev_match_gpe_method(acpi_handle obj_handle,
 		return_ACPI_STATUS(AE_OK);
 	}
 
-	if ((gpe_event_info->flags & ACPI_GPE_DISPATCH_MASK) ==
-	    ACPI_GPE_DISPATCH_HANDLER) {
-
-		/* If there is already a handler, ignore this GPE method */
-
-		return_ACPI_STATUS(AE_OK);
-	}
-
-	if ((gpe_event_info->flags & ACPI_GPE_DISPATCH_MASK) ==
-	    ACPI_GPE_DISPATCH_METHOD) {
+	if (gpe_event_info->flags & ACPI_GPE_DISPATCH_METHOD) {
 		/*
 		 * If there is already a method, ignore this method. But check
 		 * for a type mismatch (if both the _Lxx AND _Exx exist)

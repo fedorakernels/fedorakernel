@@ -28,12 +28,50 @@
 #include <linux/pci.h>
 #include <linux/pci-acpi.h>
 #include <linux/acpi.h>
+#include <linux/list.h>
 #include <linux/pm_runtime.h>
 #include <acpi/acpi_bus.h>
 #include <acpi/acpi_drivers.h>
 
 #define _COMPONENT		ACPI_PCI_COMPONENT
 ACPI_MODULE_NAME("pci_bind");
+
+static LIST_HEAD(acpi_pci_gpe_devs);
+
+struct pci_gpe_dev {
+	struct list_head node;
+	struct pci_dev *dev;
+	acpi_handle gpe_device;
+	int gpe_number;
+	struct work_struct work;
+};
+
+static void acpi_pci_wake_handler_work(struct work_struct *work)
+{
+	struct pci_gpe_dev *gpe_dev = container_of(work, struct pci_gpe_dev,
+						   work);
+
+	pci_check_pme_status(gpe_dev->dev);
+	pm_runtime_resume(&gpe_dev->dev->dev);
+	pci_wakeup_event(gpe_dev->dev);
+	if (gpe_dev->dev->subordinate)
+		pci_pme_wakeup_bus(gpe_dev->dev->subordinate);
+}
+
+static u32 acpi_pci_wake_handler(void *data)
+{
+	long gpe_number = (long) data;
+	struct pci_gpe_dev *gpe_dev;
+
+	list_for_each_entry(gpe_dev, &acpi_pci_gpe_devs, node) {
+		if (gpe_number != gpe_dev->gpe_number)
+			continue;
+
+		schedule_work(&gpe_dev->work);
+	}
+
+	return ACPI_INTERRUPT_HANDLED;
+}
 
 static int acpi_pci_unbind(struct acpi_device *device)
 {
@@ -42,6 +80,30 @@ static int acpi_pci_unbind(struct acpi_device *device)
 	dev = acpi_get_pci_dev(device->handle);
 	if (!dev)
 		goto out;
+
+	if (device->wakeup.flags.valid) {
+		struct pci_gpe_dev *gpe_dev;
+		struct pci_gpe_dev *tmp;
+		int gpe_count = 0;
+		int gpe_number = device->wakeup.gpe_number;
+		acpi_handle gpe_device = device->wakeup.gpe_device;
+
+		list_for_each_entry_safe(gpe_dev, tmp, &acpi_pci_gpe_devs, node) {
+			if (gpe_dev->dev == dev) {
+				flush_work(&gpe_dev->work);
+				list_del(&gpe_dev->node);
+				kfree(gpe_dev);
+			} else if (gpe_dev->gpe_number == gpe_number &&
+				   gpe_dev->gpe_device == gpe_device) {
+				gpe_count++;
+			}
+		}
+
+		if (gpe_count == 0) {
+			acpi_remove_gpe_handler(gpe_device, gpe_number,
+						&acpi_pci_wake_handler);
+		}
+	}
 
 	device_set_run_wake(&dev->dev, false);
 	pci_acpi_remove_pm_notifier(device);
@@ -71,6 +133,30 @@ static int acpi_pci_bind(struct acpi_device *device)
 		return 0;
 
 	pci_acpi_add_pm_notifier(device, dev);
+	if (device->wakeup.flags.valid) {
+		struct pci_gpe_dev *gpe_dev;
+		acpi_handle gpe_device = device->wakeup.gpe_device;
+		long gpe_number = device->wakeup.gpe_number;
+
+		gpe_dev = kmalloc(sizeof(struct pci_gpe_dev), GFP_KERNEL);
+		if (gpe_dev) {
+			gpe_dev->dev = dev;
+			gpe_dev->gpe_device = gpe_device;
+			gpe_dev->gpe_number = gpe_number;
+			INIT_WORK(&gpe_dev->work, acpi_pci_wake_handler_work);
+
+			acpi_install_gpe_handler(gpe_device, gpe_number,
+						 ACPI_GPE_LEVEL_TRIGGERED,
+						 &acpi_pci_wake_handler,
+						 (void *)gpe_number,
+						 true);
+			acpi_gpe_can_wake(device->wakeup.gpe_device,
+					  device->wakeup.gpe_number);
+			device->wakeup.flags.run_wake = 1;
+			list_add_tail(&gpe_dev->node, &acpi_pci_gpe_devs);
+		}
+	}
+
 	if (device->wakeup.flags.run_wake)
 		device_set_run_wake(&dev->dev, true);
 

@@ -631,9 +631,9 @@ int acpi_pm_device_sleep_state(struct device *dev, int *d_min_p)
 		acpi_method[3] = 'W';
 		status = acpi_evaluate_integer(handle, acpi_method, NULL,
 						&d_max);
-		if (ACPI_FAILURE(status)) {
+		if (ACPI_FAILURE(status) && status != AE_NOT_FOUND) {
 			d_max = d_min;
-		} else if (d_max < d_min) {
+		} else if (ACPI_SUCCESS(status) && d_max < d_min) {
 			/* Warn the user of the broken DSDT */
 			printk(KERN_WARNING "ACPI: Wrong value from %s\n",
 				acpi_method);
