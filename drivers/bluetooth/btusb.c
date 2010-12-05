@@ -229,11 +229,8 @@ static void btusb_intr_complete(struct urb *urb)
 	usb_anchor_urb(urb, &data->intr_anchor);
 
 	err = usb_submit_urb(urb, GFP_ATOMIC);
-	if (err < 0) {
-		BT_ERR("%s urb %p failed to resubmit (%d)",
-						hdev->name, urb, -err);
+	if (err < 0)
 		usb_unanchor_urb(urb);
-	}
 }
 
 static int btusb_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
@@ -313,11 +310,8 @@ static void btusb_bulk_complete(struct urb *urb)
 	usb_mark_last_busy(data->udev);
 
 	err = usb_submit_urb(urb, GFP_ATOMIC);
-	if (err < 0) {
-		BT_ERR("%s urb %p failed to resubmit (%d)",
-						hdev->name, urb, -err);
+	if (err < 0)
 		usb_unanchor_urb(urb);
-	}
 }
 
 static int btusb_submit_bulk_urb(struct hci_dev *hdev, gfp_t mem_flags)
@@ -402,11 +396,8 @@ static void btusb_isoc_complete(struct urb *urb)
 	usb_anchor_urb(urb, &data->isoc_anchor);
 
 	err = usb_submit_urb(urb, GFP_ATOMIC);
-	if (err < 0) {
-		BT_ERR("%s urb %p failed to resubmit (%d)",
-						hdev->name, urb, -err);
+	if (err < 0)
 		usb_unanchor_urb(urb);
-	}
 }
 
 static void inline __fill_isoc_descriptor(struct urb *urb, int len, int mtu)
@@ -1022,6 +1013,8 @@ static int btusb_probe(struct usb_interface *intf,
 	}
 
 	usb_set_intfdata(intf, data);
+
+	usb_enable_autosuspend(interface_to_usbdev(intf));
 
 	return 0;
 }
