@@ -426,7 +426,7 @@ static s32 e1000_init_phy_params_ich8lan(struct e1000_hw *hw)
 	switch (phy->id) {
 	case 0:
 		if (hw->adapter->pdev->device == 0x10be)
-			hw_dbg(hw, "got 0 phy id, trying anyway");
+			e_dbg(hw, "got 0 phy id, trying anyway");
 			/* Fall through to IGP03E1000 case below */
 		else
 			return -E1000_ERR_PHY;
